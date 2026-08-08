@@ -34,7 +34,7 @@ export default function Dashboard() {
       <div className="w-full max-w-3xl">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-white">Your interviews</h1>
+            <h1 className="text-2xl font-semibold text-white">Your interviews3</h1>
             <p className="mt-1 text-sm text-slate-400">
               {user ? `Signed in as ${user.name}. ` : ""}Pick up an interview you set up, or start a new one.
             </p>

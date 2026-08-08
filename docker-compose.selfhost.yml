@@ -12,7 +12,7 @@ services:
       WEBHOOK_URL: http://localhost:6102/api/webhook/interview-complete
       # Reach Postgres on the Docker host. For a remote DB, set DB_HOST in backend/.env
       # and remove or override this line.
-      DB_HOST: host.docker.internal
+      # DB_HOST: host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

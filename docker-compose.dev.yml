@@ -13,7 +13,7 @@ services:
       PORT: 6102
       CORS_ORIGIN: http://localhost:6101
       WEBHOOK_URL: http://localhost:6102/api/webhook/interview-complete
-      DB_HOST: host.docker.internal
+      # DB_HOST: host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
