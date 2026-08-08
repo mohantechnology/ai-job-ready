@@ -28,9 +28,11 @@ services:
       dockerfile: Dockerfile
       target: development
     container_name: voice-bot-frontend-dev
-    command: npm run dev -- --host 0.0.0.0 --port 6101
+    command: sh -c "npm run dev -- --host 0.0.0.0 --port $${PORT:-6101}"
     ports:
       - "6101:6101"
+    env_file:
+      - ./frontend/.env
     environment:
       API_PROXY_TARGET: http://backend:6102
     depends_on:
@@ -41,4 +43,5 @@ services:
       - ./frontend/index.html:/app/index.html
       - ./frontend/vite.config.js:/app/vite.config.js
       - ./frontend/package.json:/app/package.json
+      - ./frontend/.env:/app/.env
     restart: unless-stopped

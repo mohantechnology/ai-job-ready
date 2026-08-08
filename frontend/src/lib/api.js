@@ -1,4 +1,4 @@
-const BASE_URL = "/api";
+const BASE_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
 const TOKEN_KEY = "voicebot_token";
 
 export function getToken() {
