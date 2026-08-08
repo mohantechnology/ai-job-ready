@@ -1,0 +1,198 @@
+-- Schema for the voice-bot AI interview app.
+-- Run with: psql "$DATABASE_URL" -f backend/schema.sql
+-- (or: PGPASSWORD=... psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f backend/schema.sql)
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Cleanup of ad-hoc tables created while exploring the DB setup.
+DROP TABLE IF EXISTS test;
+
+-- ============================================================
+-- users
+-- ============================================================
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
+-- interviews
+-- ============================================================
+CREATE TABLE IF NOT EXISTS interviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  job_title TEXT NOT NULL DEFAULT '',
+  role TEXT NOT NULL CHECK (role IN ('junior', 'mid', 'senior')),
+  type_of_interview TEXT NOT NULL CHECK (type_of_interview IN ('technical', 'non-technical', 'mix', 'other')),
+  type_of_interview_other TEXT,
+  topics JSONB NOT NULL DEFAULT '[]',
+  number_of_questions INTEGER NOT NULL CHECK (number_of_questions BETWEEN 1 AND 29),
+  resume_text TEXT,
+  additional_info TEXT,
+  assistance_level TEXT NOT NULL DEFAULT 'on_request' CHECK (assistance_level IN ('always', 'on_request', 'never')),
+  status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'in_progress', 'completed')),
+  ended_reason TEXT,
+  transcript JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ
+);
+
+-- Older installs may still have the JSONB summary column from before summaries
+-- were moved into their own table (see interview_summary below).
+ALTER TABLE interviews DROP COLUMN IF EXISTS summary;
+
+-- Older installs: add new interview-setup fields (job title, "other" interview
+-- type, resume text, additional free-form info) introduced when the setup
+-- wizard grew a job-title step, a custom interview-type option, an optional
+-- resume step, and an optional additional-info step.
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS job_title TEXT NOT NULL DEFAULT '';
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS type_of_interview_other TEXT;
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS resume_text TEXT;
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS additional_info TEXT;
+
+-- Older installs: add the AI-agent-behaviour ("assistance level") field
+-- introduced when the setup wizard grew a final step letting the candidate
+-- control how much the interviewer helps when they get stuck:
+--   'always'     - interviewer proactively assists when the candidate's answer is wrong
+--   'on_request' - interviewer only assists/explains when the candidate explicitly asks for it
+--   'never'      - interviewer never assists or explains, just moves on
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS assistance_level TEXT NOT NULL DEFAULT 'on_request';
+ALTER TABLE interviews DROP CONSTRAINT IF EXISTS interviews_assistance_level_check;
+ALTER TABLE interviews ADD CONSTRAINT interviews_assistance_level_check
+  CHECK (assistance_level IN ('always', 'on_request', 'never'));
+
+-- Widen the type_of_interview / number_of_questions checks to match the new
+-- allowed values/ranges (drop-and-recreate since Postgres has no ALTER CHECK).
+ALTER TABLE interviews DROP CONSTRAINT IF EXISTS interviews_type_of_interview_check;
+ALTER TABLE interviews ADD CONSTRAINT interviews_type_of_interview_check
+  CHECK (type_of_interview IN ('technical', 'non-technical', 'mix', 'other'));
+
+ALTER TABLE interviews DROP CONSTRAINT IF EXISTS interviews_number_of_questions_check;
+ALTER TABLE interviews ADD CONSTRAINT interviews_number_of_questions_check
+  CHECK (number_of_questions BETWEEN 1 AND 29);
+
+CREATE INDEX IF NOT EXISTS idx_interviews_user_id ON interviews(user_id);
+CREATE INDEX IF NOT EXISTS idx_interviews_created_at ON interviews(created_at DESC);
+
+-- ============================================================
+-- topics
+-- Coarse subject areas (e.g. "javascript", "css"), chosen by the user when
+-- creating an interview. Looked up/created on the fly from whatever the
+-- question-generation LLM outputs - no fixed enum.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS topics (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE
+);
+
+-- ============================================================
+-- concepts
+-- Fine-grained subtopics within a topic (e.g. "event-loop", "box-model").
+-- Scoped to a topic (unique per topic, not globally) since the same concept
+-- name could plausibly mean different things under different topics.
+-- Looked up/created on the fly, same as topics - no fixed taxonomy.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS concepts (
+  id SERIAL PRIMARY KEY,
+  topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  UNIQUE (topic_id, name)
+);
+
+-- ============================================================
+-- interview_questions
+-- Questions generated by the LLM ahead of time for a given interview,
+-- so the realtime interviewer asks a fixed, pre-planned question list
+-- instead of improvising questions on the fly. score/answer/feedback are
+-- filled in after grading (see interview_summary + scoring.service.js).
+-- topic/concept are tracked via topics/concepts so past performance can be
+-- looked up per-concept when generating future interviews for the same user
+-- (see taxonomy.repository.js + questionGeneration.service.js).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS interview_questions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  interview_id UUID NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
+  order_index INTEGER NOT NULL,
+  question_text TEXT NOT NULL,
+  topic_id INTEGER REFERENCES topics(id),
+  concept_id INTEGER REFERENCES concepts(id),
+  answer TEXT,
+  score INTEGER,
+  feedback TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (interview_id, order_index)
+);
+
+ALTER TABLE interview_questions DROP COLUMN IF EXISTS topic;
+ALTER TABLE interview_questions ADD COLUMN IF NOT EXISTS topic_id INTEGER REFERENCES topics(id);
+ALTER TABLE interview_questions ADD COLUMN IF NOT EXISTS concept_id INTEGER REFERENCES concepts(id);
+ALTER TABLE interview_questions ADD COLUMN IF NOT EXISTS answer TEXT;
+ALTER TABLE interview_questions ADD COLUMN IF NOT EXISTS score INTEGER;
+ALTER TABLE interview_questions ADD COLUMN IF NOT EXISTS feedback TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_interview_questions_interview_id ON interview_questions(interview_id);
+CREATE INDEX IF NOT EXISTS idx_interview_questions_concept_id ON interview_questions(concept_id);
+
+-- ============================================================
+-- interview_summary
+-- One row per graded interview, holding the overall/aggregate grading
+-- result. Per-question score/answer/feedback live on interview_questions
+-- instead. interviews.summary_id points here.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS interview_summary (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  interview_id UUID NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
+  overall_score INTEGER,
+  overall_feedback TEXT,
+  strengths JSONB NOT NULL DEFAULT '[]',
+  improvements JSONB NOT NULL DEFAULT '[]',
+  topics JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_interview_summary_interview_id ON interview_summary(interview_id);
+
+ALTER TABLE interviews
+  ADD COLUMN IF NOT EXISTS summary_id UUID REFERENCES interview_summary(id) ON DELETE SET NULL;
+
+-- ============================================================
+-- whiteboard_submissions
+-- Compressed JPEG snapshots of the candidate's whiteboard (Excalidraw)
+-- drawings (schemas/system-design/diagrams) submitted during an interview.
+-- Stored as bytea (kept under ~2MB by client-side compression before
+-- upload) so they can be re-viewed later from the Results page. Mirrors
+-- the question_order_index convention used for text/code submissions in
+-- the transcript, so a submission can be matched back to the question
+-- that was active when it was sent.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS whiteboard_submissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  interview_id UUID NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
+  question_order_index INTEGER NOT NULL DEFAULT 0,
+  mime_type TEXT NOT NULL DEFAULT 'image/jpeg',
+  size_bytes INTEGER NOT NULL,
+  image_data BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_whiteboard_submissions_interview_id ON whiteboard_submissions(interview_id);
+
+-- ============================================================
+-- session
+-- Backing store for express-session (via connect-pg-simple), so login
+-- sessions survive a backend restart instead of living only in memory.
+-- Table shape follows connect-pg-simple's expected schema.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS session (
+  sid VARCHAR NOT NULL COLLATE "default" PRIMARY KEY,
+  sess JSON NOT NULL,
+  expire TIMESTAMP(6) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_expire ON session(expire);

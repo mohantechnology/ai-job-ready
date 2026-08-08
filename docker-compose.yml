@@ -1,0 +1,36 @@
+services:
+  backend:
+    image: ai-interview-backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: voice-bot-backend
+    ports:
+      - "6102:6102"
+    env_file:
+      - ./backend/.env
+    environment:
+      PORT: 6102
+      CORS_ORIGIN: http://localhost:6101
+      WEBHOOK_URL: http://localhost:6102/api/webhook/interview-complete
+      # Reach Postgres on the Docker host. For a remote DB, set DB_HOST in backend/.env
+      # and remove or override this line.
+      DB_HOST: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  frontend:
+    image: ai-interview-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    container_name: voice-bot-frontend
+    ports:
+      - "6101:6101"
+    environment:
+      API_PROXY_TARGET: http://backend:6102
+    depends_on:
+      - backend
+    restart: unless-stopped

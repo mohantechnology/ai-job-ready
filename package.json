@@ -1,0 +1,21 @@
+{
+  "name": "voice-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI interview voice bot — root scripts for Docker workflows",
+  "scripts": {
+    "dev": "docker compose -f docker-compose.dev.yml up --build",
+    "dev:detach": "docker compose -f docker-compose.dev.yml up --build -d",
+    "dev:down": "docker compose -f docker-compose.dev.yml down",
+    "start": "docker compose up --build",
+    "start:detach": "docker compose up --build -d",
+    "stop": "docker compose down",
+    "down": "docker compose down",
+    "logs": "docker compose logs -f",
+    "images:build": "docker compose build",
+    "images:export": "mkdir -p images && docker save ai-interview-backend:latest -o images/ai-interview-backend.tar && docker save ai-interview-frontend:latest -o images/ai-interview-frontend.tar && ls -lh images/*.tar",
+    "images:selfhost": "docker load -i images/ai-interview-backend.tar && docker load -i images/ai-interview-frontend.tar && docker compose -f docker-compose.selfhost.yml up -d",
+    "selfhost:down": "docker compose -f docker-compose.selfhost.yml down",
+    "selfhost:logs": "docker compose -f docker-compose.selfhost.yml logs -f"
+  }
+}

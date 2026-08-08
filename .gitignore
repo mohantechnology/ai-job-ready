@@ -1,0 +1,7 @@
+node_modules
+images/*.tar
+.DS_Store
+*.log
+task.txt
+MEMORY.md
+old/
