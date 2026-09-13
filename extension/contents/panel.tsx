@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react"
 import type { PlasmoCSConfig } from "plasmo"
 
 import { getAdapterForHostname } from "~adapters"
+import { ACCESS_TOKEN_KEY, isWebOrigin } from "~lib/auth"
 import type { ExtensionMessage } from "~lib/messaging"
-import { requestFillFromBackground } from "~lib/messaging"
+import { requestFillFromBackground, sendMessageWithTimeout } from "~lib/messaging"
 
 // Same broad matches as the field-detection content script - this panel is
 // the primary way users trigger a fill, so it needs to be present anywhere
@@ -110,10 +111,34 @@ const statusStyle = (color: string): CSSProperties => ({
 
 function JobBotPanel() {
   const [collapsed, setCollapsed] = useState(false)
+  const [loggedIn, setLoggedIn] = useState(false)
   const [status, setStatus] = useState<FillStatus>("idle")
   const [errorMessage, setErrorMessage] = useState("")
   const streamedRef = useRef(false)
   const adapter = getAdapterForHostname(window.location.hostname)
+  const onWebsite = isWebOrigin(window.location.origin)
+
+  useEffect(() => {
+    async function loadAuth() {
+      try {
+        const result = await chrome.storage.local.get(ACCESS_TOKEN_KEY)
+        setLoggedIn(typeof result[ACCESS_TOKEN_KEY] === "string" && Boolean(result[ACCESS_TOKEN_KEY]))
+      } catch {
+        setLoggedIn(false)
+      }
+    }
+
+    loadAuth()
+    const onChanged = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
+      if (area !== "local") return
+      if (changes[ACCESS_TOKEN_KEY]) {
+        const token = changes[ACCESS_TOKEN_KEY].newValue
+        setLoggedIn(typeof token === "string" && Boolean(token))
+      }
+    }
+    chrome.storage.onChanged.addListener(onChanged)
+    return () => chrome.storage.onChanged.removeListener(onChanged)
+  }, [])
 
   useEffect(() => {
     const onMessage = (message: ExtensionMessage) => {
@@ -146,6 +171,10 @@ function JobBotPanel() {
   }, [adapter])
 
   async function handleAutofill() {
+    if (!loggedIn) {
+      await sendMessageWithTimeout({ type: "OPEN_LOGIN" }, 5000)
+      return
+    }
     setStatus("filling")
     setErrorMessage("")
     streamedRef.current = false
@@ -181,12 +210,16 @@ function JobBotPanel() {
     setTimeout(() => setStatus("idle"), 1500)
   }
 
+  if (onWebsite) {
+    return null
+  }
+
   if (collapsed) {
     return (
       <button
         type="button"
         onClick={() => setCollapsed(false)}
-        title="Open Job Bot"
+        title="Open Form Filler"
         style={launcherStyle}>
         ⚡
       </button>
@@ -196,7 +229,7 @@ function JobBotPanel() {
   return (
     <div style={panelStyle}>
       <div style={headerStyle}>
-        <span style={{ fontWeight: 700, fontSize: 14 }}>⚡ Job Bot</span>
+        <span style={{ fontWeight: 700, fontSize: 14 }}>⚡ Form Filler</span>
         <button
           type="button"
           onClick={() => setCollapsed(true)}
@@ -211,7 +244,11 @@ function JobBotPanel() {
           onClick={handleAutofill}
           disabled={status === "filling"}
           style={primaryButtonStyle}>
-          {status === "filling" ? "Filling..." : "⚡ Autofill"}
+          {status === "filling"
+            ? "Filling..."
+            : loggedIn
+              ? "⚡ Autofill"
+              : "Sign in to autofill"}
         </button>
         <button type="button" onClick={handleSaveJob} style={secondaryButtonStyle}>
           💾 Save job

@@ -2,10 +2,7 @@ import { query } from "../db/pool.js";
 
 // Postgres-backed replacement for job-bot/backend's flat-file
 // `userService.js` (src/data/userdetails.json), merged into this backend.
-// Single row (id = 1) for now - the extension has no login/auth yet (see
-// schema.sql's `user_profile` table comment). Once the extension gains real
-// auth, swap the hardcoded `SINGLE_ROW_ID` for the authenticated user's id.
-const SINGLE_ROW_ID = 1;
+// One row per authenticated account (`user_profile.user_id` → `users.id`).
 
 // Sanity caps so one bad/huge extension request can't blow up a row with an
 // absurd amount of data.
@@ -14,16 +11,26 @@ const MAX_LABEL_LENGTH = 400;
 const MAX_VALUE_LENGTH = 2000;
 const MAX_NEW_DETAILS = 200;
 
+function requireUserId(userId) {
+  if (typeof userId !== "string" || !userId.trim()) {
+    throw new Error("Authenticated user id is required");
+  }
+  return userId.trim();
+}
+
 /**
  * Reads the profile row fresh on every call (no in-memory cache) so
  * `save-details` calls are immediately visible to the next fill.
+ * Missing rows return empty lists (the row is created on first write).
+ * @param {string} userId
  * @returns {Promise<{details: object[], newDetails: object[]}>}
  */
-export async function getUserDetails() {
+export async function getUserDetails(userId) {
+  const id = requireUserId(userId);
   try {
     const result = await query(
-      `SELECT details, new_details FROM user_profile WHERE id = $1`,
-      [SINGLE_ROW_ID]
+      `SELECT details, new_details FROM user_profile WHERE user_id = $1`,
+      [id]
     );
     const row = result.rows[0];
     return {
@@ -112,15 +119,16 @@ function findExistingIndex(list, field) {
   });
 }
 
-async function writeUserDetails(details, newDetails) {
+async function writeUserDetails(userId, details, newDetails) {
+  const id = requireUserId(userId);
   await query(
-    `INSERT INTO user_profile (id, details, new_details)
+    `INSERT INTO user_profile (user_id, details, new_details)
      VALUES ($1, $2, $3)
-     ON CONFLICT (id) DO UPDATE
+     ON CONFLICT (user_id) DO UPDATE
        SET details = EXCLUDED.details,
            new_details = EXCLUDED.new_details,
            updated_at = now()`,
-    [SINGLE_ROW_ID, JSON.stringify(details), JSON.stringify(newDetails)]
+    [id, JSON.stringify(details), JSON.stringify(newDetails)]
   );
   return { details, newDetails };
 }
@@ -129,10 +137,11 @@ async function writeUserDetails(details, newDetails) {
  * Upserts confirmed form answers into `newDetails` (does not mutate `details`).
  * Match by `key`, then by normalized label, so saving the same question twice
  * updates the existing row instead of duplicating it.
+ * @param {string} userId
  * @param {object[]} fields
  * @returns {Promise<{details: object[], newDetails: object[]}>}
  */
-export async function saveNewDetails(fields) {
+export async function saveNewDetails(userId, fields) {
   const incoming = (Array.isArray(fields) ? fields : [])
     .map(normalizeDetailField)
     .filter(Boolean);
@@ -140,7 +149,7 @@ export async function saveNewDetails(fields) {
     throw new Error("At least one field with `label` and a non-empty `answer` is required");
   }
 
-  const { details, newDetails: existing } = await getUserDetails();
+  const { details, newDetails: existing } = await getUserDetails(userId);
   const newDetails = [...existing];
 
   for (const field of incoming) {
@@ -156,17 +165,18 @@ export async function saveNewDetails(fields) {
     newDetails.shift();
   }
 
-  return writeUserDetails(details, newDetails);
+  return writeUserDetails(userId, details, newDetails);
 }
 
 /**
  * Back-compat wrapper for the old `{ label, value }` save-answer body.
+ * @param {string} userId
  * @param {string} label
  * @param {string} value
  * @returns {Promise<{details: object[], newDetails: object[]}>}
  */
-export async function saveAdditionalAnswer(label, value) {
-  return saveNewDetails([{ label, key: keyFromLabel(label), answer: [{ value }] }]);
+export async function saveAdditionalAnswer(userId, label, value) {
+  return saveNewDetails(userId, [{ label, key: keyFromLabel(label), answer: [{ value }] }]);
 }
 
 /**
@@ -177,10 +187,11 @@ export async function saveAdditionalAnswer(label, value) {
  * form answer.
  * Match by `key`, then by normalized label, so editing an existing question
  * updates it in place instead of duplicating it.
+ * @param {string} userId
  * @param {object[]} fields
  * @returns {Promise<{details: object[], newDetails: object[]}>}
  */
-export async function saveCanonicalDetails(fields) {
+export async function saveCanonicalDetails(userId, fields) {
   const incoming = (Array.isArray(fields) ? fields : [])
     .map(normalizeDetailField)
     .filter(Boolean);
@@ -188,7 +199,7 @@ export async function saveCanonicalDetails(fields) {
     throw new Error("At least one field with `label` and a non-empty `answer` is required");
   }
 
-  const { details: existing, newDetails } = await getUserDetails();
+  const { details: existing, newDetails } = await getUserDetails(userId);
   const details = [...existing];
 
   for (const field of incoming) {
@@ -200,25 +211,26 @@ export async function saveCanonicalDetails(fields) {
     }
   }
 
-  return writeUserDetails(details, newDetails);
+  return writeUserDetails(userId, details, newDetails);
 }
 
 /**
  * Removes a single field (by `key`) from the canonical `details` list.
+ * @param {string} userId
  * @param {string} key
  * @returns {Promise<{details: object[], newDetails: object[]}>}
  */
-export async function deleteCanonicalDetail(key) {
+export async function deleteCanonicalDetail(userId, key) {
   const trimmedKey = asTrimmedString(key, MAX_KEY_LENGTH);
   if (!trimmedKey) {
     throw new Error("`key` is required");
   }
 
-  const { details: existing, newDetails } = await getUserDetails();
+  const { details: existing, newDetails } = await getUserDetails(userId);
   const details = existing.filter((field) => field?.key !== trimmedKey);
   if (details.length === existing.length) {
     throw new Error(`No profile field found with key "${trimmedKey}"`);
   }
 
-  return writeUserDetails(details, newDetails);
+  return writeUserDetails(userId, details, newDetails);
 }

@@ -1,16 +1,42 @@
-import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
+function ExtensionConnected() {
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900/60 p-8 shadow-2xl shadow-black/40 backdrop-blur">
+        <h1 className="text-2xl font-semibold text-white">Extension connected</h1>
+        <p className="mt-2 text-sm text-slate-400">
+          You are signed in. Close this tab and open the Job Bot extension to continue.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function Login() {
-  const { login } = useAuth();
+  const { login, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const fromExtension = searchParams.get("from") === "extension";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    if (isLoading || !isAuthenticated) return;
+    if (fromExtension) {
+      setConnected(true);
+      return;
+    }
+    const redirectTo = location.state?.from?.pathname || "/dashboard";
+    navigate(redirectTo, { replace: true });
+  }, [fromExtension, isAuthenticated, isLoading, location.state, navigate]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -18,6 +44,10 @@ export default function Login() {
     setIsSubmitting(true);
     try {
       await login({ email, password });
+      if (fromExtension) {
+        setConnected(true);
+        return;
+      }
       const redirectTo = location.state?.from?.pathname || "/dashboard";
       navigate(redirectTo, { replace: true });
     } catch (err) {
@@ -27,11 +57,19 @@ export default function Login() {
     }
   }
 
+  if (connected) {
+    return <ExtensionConnected />;
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900/60 p-8 shadow-2xl shadow-black/40 backdrop-blur">
         <h1 className="text-2xl font-semibold text-white">Welcome back</h1>
-        <p className="mt-2 text-sm text-slate-400">Log in to continue practicing your interviews.</p>
+        <p className="mt-2 text-sm text-slate-400">
+          {fromExtension
+            ? "Log in to connect the Job Bot extension to your JobReady account."
+            : "Log in to continue practicing your interviews."}
+        </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {error && (
@@ -75,7 +113,10 @@ export default function Login() {
 
         <p className="mt-6 text-center text-sm text-slate-400">
           Don't have an account?{" "}
-          <Link to="/register" className="font-medium text-indigo-300 hover:text-indigo-200">
+          <Link
+            to={fromExtension ? "/register?from=extension" : "/register"}
+            className="font-medium text-indigo-300 hover:text-indigo-200"
+          >
             Sign up
           </Link>
         </p>

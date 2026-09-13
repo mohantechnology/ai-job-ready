@@ -90,7 +90,7 @@ async function dumpOpenAI({ messages, parsed, extra }) {
  * @returns {Promise<{answers:object[], timing: object}>}
  */
 export async function fillFormFields(pageHtml, profile, meta, options = {}) {
-  const { messages, cacheKey } = await prepareFillRequest(pageHtml, profile, meta);
+  const { messages, cacheKey } = await prepareFillRequest(pageHtml, profile, meta, options);
   const onDelta = typeof options.onDelta === "function" ? options.onDelta : null;
 
   const llmStartedAt = Date.now();

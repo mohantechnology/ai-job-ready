@@ -18,7 +18,7 @@ function IndexOptions() {
 
   return (
     <div style={{ padding: 24, maxWidth: 560, fontFamily: "sans-serif" }}>
-      <h2>Job Bot - Profile</h2>
+      <h2>Form Filler - Profile</h2>
       <p style={{ color: "#555", fontSize: 14 }}>
         Paste your resume/profile info below. This stays on your device
         (chrome.storage.local) and is only sent to your configured backend

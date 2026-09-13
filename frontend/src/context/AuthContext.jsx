@@ -1,5 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { getMe, getToken, login as apiLogin, logout as apiLogout, register as apiRegister, setToken } from "../lib/api.js";
+import {
+  getMe,
+  getToken,
+  login as apiLogin,
+  logout as apiLogout,
+  persistAuth,
+  register as apiRegister,
+} from "../lib/api.js";
 
 const AuthContext = createContext(null);
 
@@ -13,21 +20,27 @@ export function AuthProvider({ children }) {
       return;
     }
     getMe()
-      .then(({ user: data }) => setUser(data))
-      .catch(() => setToken(null))
+      .then(({ user: data }) => {
+        persistAuth(getToken(), data);
+        setUser(data);
+      })
+      .catch(() => {
+        persistAuth(null, null);
+        setUser(null);
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
   const login = useCallback(async (credentials) => {
     const { user: data, token } = await apiLogin(credentials);
-    setToken(token);
+    persistAuth(token, data);
     setUser(data);
     return data;
   }, []);
 
   const register = useCallback(async (details) => {
     const { user: data, token } = await apiRegister(details);
-    setToken(token);
+    persistAuth(token, data);
     setUser(data);
     return data;
   }, []);
@@ -38,7 +51,7 @@ export function AuthProvider({ children }) {
     } catch {
       // ignore - we clear local auth state regardless
     }
-    setToken(null);
+    persistAuth(null, null);
     setUser(null);
   }, []);
 

@@ -60,7 +60,7 @@ app.use("/api/webhook", webhookRoutes);
 
 // Merged in from job-bot/backend - the job-bot browser extension's autofill
 // backend. /api/form/fill/cursor and /api/user/save-details are the two
-// endpoints the extension actually calls (see job-bot/extension/background.ts).
+// endpoints the extension actually calls, both behind JWT auth.
 app.use("/api/form", jobbotFormRoutes);
 app.use("/api/user", jobbotProfileRoutes);
 // Test-only debug viewer: /forms/sample.html (stable) and /forms/<dump> from

@@ -9,19 +9,18 @@ import {
 } from "../controllers/jobbotProfile.controller.js";
 
 // Ported from job-bot/backend/src/routes/userRoutes.js. Mounted at
-// /api/user in app.js - /save-details is the endpoint the job-bot browser
-// extension actually calls (no auth - the extension has no login); /save-answer
-// is the older back-compat body shape.
+// /api/user in app.js. The job-bot extension and the website Job profile
+// tab both send a JWT; requireAuth resolves it to req.userId so each
+// caller only reads/writes their own `user_profile` row.
 const router = Router();
+
+router.use(requireAuth);
 
 router.post("/save-details", saveDetails);
 router.post("/save-answer", saveAnswer);
 
-// /profile powers the "Job profile" tab in the voice-bot frontend, which is
-// only reachable once signed in, so these are behind requireAuth (unlike the
-// extension-facing routes above).
-router.get("/profile", requireAuth, getProfile);
-router.put("/profile", requireAuth, updateProfile);
-router.delete("/profile/:key", requireAuth, deleteProfileField);
+router.get("/profile", getProfile);
+router.put("/profile", updateProfile);
+router.delete("/profile/:key", deleteProfileField);
 
 export default router;

@@ -1,16 +1,41 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 
+function ExtensionConnected() {
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900/60 p-8 shadow-2xl shadow-black/40 backdrop-blur">
+        <h1 className="text-2xl font-semibold text-white">Extension connected</h1>
+        <p className="mt-2 text-sm text-slate-400">
+          You are signed in. Close this tab and open the Job Bot extension to continue.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function Register() {
-  const { register } = useAuth();
+  const { register, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fromExtension = searchParams.get("from") === "extension";
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    if (isLoading || !isAuthenticated) return;
+    if (fromExtension) {
+      setConnected(true);
+      return;
+    }
+    navigate("/dashboard", { replace: true });
+  }, [fromExtension, isAuthenticated, isLoading, navigate]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -18,6 +43,10 @@ export default function Register() {
     setIsSubmitting(true);
     try {
       await register({ name, email, password });
+      if (fromExtension) {
+        setConnected(true);
+        return;
+      }
       navigate("/dashboard", { replace: true });
     } catch (err) {
       setError(err.message || "Could not create your account.");
@@ -26,11 +55,19 @@ export default function Register() {
     }
   }
 
+  if (connected) {
+    return <ExtensionConnected />;
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900/60 p-8 shadow-2xl shadow-black/40 backdrop-blur">
         <h1 className="text-2xl font-semibold text-white">Create your account</h1>
-        <p className="mt-2 text-sm text-slate-400">Sign up to start practicing mock interviews.</p>
+        <p className="mt-2 text-sm text-slate-400">
+          {fromExtension
+            ? "Sign up to connect the Job Bot extension to your JobReady account."
+            : "Sign up to start practicing mock interviews."}
+        </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {error && (
@@ -87,7 +124,10 @@ export default function Register() {
 
         <p className="mt-6 text-center text-sm text-slate-400">
           Already have an account?{" "}
-          <Link to="/login" className="font-medium text-indigo-300 hover:text-indigo-200">
+          <Link
+            to={fromExtension ? "/login?from=extension" : "/login"}
+            className="font-medium text-indigo-300 hover:text-indigo-200"
+          >
             Log in
           </Link>
         </p>

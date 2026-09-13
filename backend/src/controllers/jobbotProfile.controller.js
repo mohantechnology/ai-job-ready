@@ -7,7 +7,8 @@ import {
 } from "../repositories/userProfile.repository.js";
 
 // Ported from job-bot/backend/src/routes/userRoutes.js as part of merging
-// the job-bot extension's backend into this one.
+// the job-bot extension's backend into this one. Every handler reads/writes
+// the profile row for `req.userId` (JWT `sub` / session user).
 
 function parseFieldsBody(body) {
   if (Array.isArray(body?.fields)) return body.fields;
@@ -29,7 +30,7 @@ export async function saveDetails(req, res) {
   }
 
   try {
-    const updated = await saveNewDetails(fields);
+    const updated = await saveNewDetails(req.userId, fields);
     res.json({ ok: true, newDetails: updated.newDetails });
   } catch (err) {
     console.error("jobbot user/save-details failed:", err);
@@ -49,7 +50,7 @@ export async function saveAnswer(req, res) {
   }
 
   try {
-    await saveAdditionalAnswer(label, value);
+    await saveAdditionalAnswer(req.userId, label, value);
     res.json({ ok: true });
   } catch (err) {
     console.error("jobbot user/save-answer failed:", err);
@@ -63,7 +64,7 @@ export async function saveAnswer(req, res) {
 // plus the confirmed answers picked up from real job applications.
 export async function getProfile(req, res) {
   try {
-    const { details, newDetails } = await getUserDetails();
+    const { details, newDetails } = await getUserDetails(req.userId);
     res.json({ details, newDetails });
   } catch (err) {
     console.error("jobbot user/profile GET failed:", err);
@@ -85,7 +86,7 @@ export async function updateProfile(req, res) {
   }
 
   try {
-    const updated = await saveCanonicalDetails(fields);
+    const updated = await saveCanonicalDetails(req.userId, fields);
     res.json({ ok: true, details: updated.details });
   } catch (err) {
     console.error("jobbot user/profile PUT failed:", err);
@@ -100,7 +101,7 @@ export async function deleteProfileField(req, res) {
   const { key } = req.params;
 
   try {
-    const updated = await deleteCanonicalDetail(key);
+    const updated = await deleteCanonicalDetail(req.userId, key);
     res.json({ ok: true, details: updated.details });
   } catch (err) {
     console.error("jobbot user/profile DELETE failed:", err);

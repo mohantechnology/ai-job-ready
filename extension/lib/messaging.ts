@@ -4,6 +4,10 @@
  * lets every other layer stay browser-agnostic and swap transports later.
  */
 
+import type { AuthUser } from "~lib/auth"
+
+export type { AuthUser }
+
 export type FieldAction = "type" | "select" | "check" | "uncheck" | "skip"
 
 /**
@@ -192,6 +196,30 @@ export type SaveAnswerResult = {
   error?: string
 }
 
+export type AuthStateResult = {
+  loggedIn: boolean
+  user?: AuthUser | null
+}
+
+/** Website content script → background: copy the JobReady JWT into extension storage. */
+export type AuthSyncMessage = {
+  type: "AUTH_SYNC"
+  token: string | null
+  user?: AuthUser | null
+}
+
+export type GetAuthMessage = {
+  type: "GET_AUTH"
+}
+
+export type LogoutMessage = {
+  type: "LOGOUT"
+}
+
+export type OpenLoginMessage = {
+  type: "OPEN_LOGIN"
+}
+
 export type ExtensionMessage =
   | FieldsDetectedMessage
   | RequestFillMessage
@@ -199,6 +227,10 @@ export type ExtensionMessage =
   | FillStreamMessage
   | SaveAnswerMessage
   | SaveDetailsMessage
+  | AuthSyncMessage
+  | GetAuthMessage
+  | LogoutMessage
+  | OpenLoginMessage
 
 export type BackendFillRequest = {
   pageHtml: string

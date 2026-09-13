@@ -187,20 +187,22 @@ CREATE INDEX IF NOT EXISTS idx_whiteboard_submissions_interview_id ON whiteboard
 -- user_profile
 -- Job-bot autofill candidate profile, merged in from the standalone
 -- job-bot/backend service (see src/repositories/userProfile.repository.js).
--- Single row for now (id = 1) - the extension has no login/auth yet, so
--- there is no per-user FK to `users` yet. `details` is the canonical
+-- One row per account (`user_id` → `users.id`). `details` is the canonical
 -- profile; `new_details` are facts the candidate later confirmed on real
 -- forms (same shape as the old flat-file userdetails.json this replaces).
--- TODO: add a `user_id UUID REFERENCES users(id)` column once the
--- extension gains real auth, and drop the single-row assumption.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS user_profile (
   id SERIAL PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   details JSONB NOT NULL DEFAULT '[]',
   new_details JSONB NOT NULL DEFAULT '[]',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Existing installs created this table before per-user auth existed.
+ALTER TABLE user_profile
+  ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE;
 
 -- Seed the single row (id = 1) this table uses today, carrying over the
 -- real data that used to live in job-bot/backend/src/data/userdetails.json.
@@ -241,6 +243,16 @@ $$[
   {"label": "Hide jobs which require me to apply on the company's website", "key": "hideJobsWhichRequireMeToApplyOn", "answer": [{"value": "No"}]}
 ]$$::jsonb
 WHERE NOT EXISTS (SELECT 1 FROM user_profile WHERE id = 1);
+
+-- Attach the legacy single-row profile (id = 1) to the oldest account so
+-- existing autofill data is not orphaned after the per-user switch.
+UPDATE user_profile
+SET user_id = (SELECT id FROM users ORDER BY created_at ASC LIMIT 1)
+WHERE id = 1
+  AND user_id IS NULL
+  AND EXISTS (SELECT 1 FROM users);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profile_user_id ON user_profile (user_id);
 
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $trigger$

@@ -1,6 +1,6 @@
 {
   "name": "extension",
-  "displayName": "Job Bot",
+  "displayName": "Form Filler",
   "version": "0.0.1",
   "description": "Browser extension for AI-assisted job application form filling",
   "scripts": {
@@ -29,6 +29,13 @@
       "storage",
       "activeTab"
     ],
-    "host_permissions": []
+    "host_permissions": [
+      "http://localhost:6101/*",
+      "http://localhost:6102/*",
+      "http://127.0.0.1:6101/*",
+      "http://127.0.0.1:6102/*",
+      "http://*/*",
+      "https://*/*"
+    ]
   }
 }

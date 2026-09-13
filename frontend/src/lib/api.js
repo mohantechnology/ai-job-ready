@@ -1,16 +1,48 @@
 const BASE_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
 const TOKEN_KEY = "voicebot_token";
+const USER_KEY = "voicebot_user";
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
 
-export function setToken(token) {
+export function getStoredUser() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function notifyExtensionAuthChanged() {
+  try {
+    const payload = { token: getToken(), user: getStoredUser() };
+    window.dispatchEvent(new CustomEvent("jobready:auth-changed", { detail: payload }));
+    window.postMessage({ source: "jobready", type: "auth-changed", ...payload }, window.location.origin);
+  } catch {
+    // CustomEvent/postMessage can fail in non-browser test environments.
+  }
+}
+
+export function persistAuth(token, user) {
   if (token) {
     localStorage.setItem(TOKEN_KEY, token);
   } else {
     localStorage.removeItem(TOKEN_KEY);
   }
+
+  if (user) {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(USER_KEY);
+  }
+
+  notifyExtensionAuthChanged();
+}
+
+export function setToken(token) {
+  persistAuth(token, token ? getStoredUser() : null);
 }
 
 async function request(path, options = {}) {

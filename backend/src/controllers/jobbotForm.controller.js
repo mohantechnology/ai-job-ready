@@ -58,6 +58,7 @@ async function handleFill(req, res, fillFn, provider) {
 
     const result = await fillFn(payload.pageHtml, payload.profile, payload.meta, {
       signal: abort.signal,
+      userId: req.userId,
       onDelta: (chunk) => {
         writeFillEvent(res, {
           type: "delta",

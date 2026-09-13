@@ -1,4 +1,12 @@
+import {
+  clearAuthState,
+  getLoginUrl,
+  readAuthState,
+  writeAuthState,
+  type AuthUser
+} from "~lib/auth"
 import type {
+  AuthStateResult,
   BackendFillRequest,
   BackendFillResponse,
   ExtensionMessage,
@@ -11,13 +19,15 @@ import type {
   UserDetailField
 } from "~lib/messaging"
 import { FILL_REQUEST_TIMEOUT_MS, LAST_FILL_RESULT_KEY } from "~lib/messaging"
+import { getApiBaseUrl } from "~lib/settings"
 import { extractCompleteAnswers, extractStreamingTarget, streamTargetKey } from "~lib/streamFill"
 
 // Only the background worker ever calls the backend - content scripts and
-// the popup only ever talk to it via chrome.runtime messaging. This is the
-// one seam where a bearer token / auth header would be added later.
-const API_BASE_URL = process.env.PLASMO_PUBLIC_API_BASE_URL || "http://localhost:8787"
-// const API_BASE_URL = process.env.PLASMO_PUBLIC_API_BASE_URL || "http://localhost:8787"
+// the popup only ever talk to it via chrome.runtime messaging. The JWT
+// copied from the website is attached here as Authorization: Bearer.
+// The URL itself is resolved fresh (via `getApiBaseUrl()`) on every call
+// below instead of read once at module load, so a backend URL the user
+// edits in the popup takes effect on the very next request.
 
 // Just under the panel's wait budget so an abort still has time to report
 // an error before the UI timeout. Do not abort earlier than this.
@@ -34,6 +44,70 @@ const latestFieldsByTab = new Map<number, TabFieldData>()
 async function getStoredProfile(): Promise<string> {
   const result = await chrome.storage.local.get("profile")
   return typeof result.profile === "string" ? result.profile : ""
+}
+
+function isAuthUser(value: unknown): value is AuthUser {
+  if (!value || typeof value !== "object") return false
+  const user = value as AuthUser
+  return typeof user.id === "string" && typeof user.name === "string" && typeof user.email === "string"
+}
+
+async function getAuthHeaders(): Promise<{ token: string; headers: Record<string, string> } | null> {
+  const auth = await readAuthState()
+  if (!auth.token) return null
+  return {
+    token: auth.token,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${auth.token}`
+    }
+  }
+}
+
+async function handleUnauthorized(): Promise<void> {
+  await clearAuthState()
+}
+
+async function handleAuthSync(token: string | null, user?: AuthUser | null): Promise<void> {
+  if (!token) {
+    await clearAuthState()
+    return
+  }
+
+  let nextUser = isAuthUser(user) ? user : null
+  try {
+    const apiBaseUrl = await getApiBaseUrl()
+    const response = await fetch(`${apiBaseUrl}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (response.status === 401) {
+      await clearAuthState()
+      return
+    }
+    if (response.ok) {
+      const data = await response.json()
+      if (isAuthUser(data?.user)) nextUser = data.user
+    }
+  } catch {
+    // Backend unreachable - still persist the website token so fill can retry.
+  }
+
+  await writeAuthState(token, nextUser)
+}
+
+async function handleGetAuth(): Promise<AuthStateResult> {
+  const auth = await readAuthState()
+  return { loggedIn: auth.loggedIn, user: auth.user }
+}
+
+async function handleLogout(): Promise<{ ok: true }> {
+  await clearAuthState()
+  return { ok: true }
+}
+
+async function handleOpenLogin(): Promise<{ ok: true }> {
+  await chrome.tabs.create({ url: getLoginUrl() })
+  return { ok: true }
 }
 
 function relayFillStream(tabId: number, message: FillStreamMessage): void {
@@ -151,13 +225,24 @@ async function requestFillFromBackend(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FILL_FETCH_TIMEOUT_MS)
 
+  const auth = await getAuthHeaders()
+  if (!auth) {
+    throw new Error("Sign in to JobReady to fill applications.")
+  }
+
   try {
-    const response = await fetch(`${API_BASE_URL}/api/form/fill/cursor`, {
+    const apiBaseUrl = await getApiBaseUrl()
+    const response = await fetch(`${apiBaseUrl}/api/form/fill/cursor`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: auth.headers,
       body: JSON.stringify(body),
       signal: controller.signal
     })
+
+    if (response.status === 401) {
+      await handleUnauthorized()
+      throw new Error("Your session expired. Sign in again to continue.")
+    }
 
     if (!response.ok) {
       throw new Error(`Backend responded with ${response.status}`)
@@ -221,6 +306,16 @@ async function handleRequestFill(
       const result = {
         ok: false,
         error: "No fillable fields detected on this page yet. Try reloading the page."
+      }
+      await persistFillResult(tabId, result)
+      return result
+    }
+
+    const auth = await readAuthState()
+    if (!auth.loggedIn) {
+      const result = {
+        ok: false,
+        error: "Sign in to JobReady to fill applications."
       }
       await persistFillResult(tabId, result)
       return result
@@ -301,11 +396,21 @@ function keyFromLabel(label: string): string {
 
 async function handleSaveDetails(fields: UserDetailField[]): Promise<SaveAnswerResult> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/user/save-details`, {
+    const auth = await getAuthHeaders()
+    if (!auth) {
+      return { ok: false, error: "Sign in to JobReady to save answers." }
+    }
+
+    const apiBaseUrl = await getApiBaseUrl()
+    const response = await fetch(`${apiBaseUrl}/api/user/save-details`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: auth.headers,
       body: JSON.stringify({ fields })
     })
+    if (response.status === 401) {
+      await handleUnauthorized()
+      return { ok: false, error: "Your session expired. Sign in again to continue." }
+    }
     if (!response.ok) {
       throw new Error(`Backend responded with ${response.status}`)
     }
@@ -354,6 +459,26 @@ chrome.runtime.onMessage.addListener(
 
     if (message.type === "SAVE_DETAILS") {
       handleSaveDetails(message.fields).then(sendResponse)
+      return true
+    }
+
+    if (message.type === "AUTH_SYNC") {
+      handleAuthSync(message.token, message.user).then(() => sendResponse({ ok: true }))
+      return true
+    }
+
+    if (message.type === "GET_AUTH") {
+      handleGetAuth().then(sendResponse)
+      return true
+    }
+
+    if (message.type === "LOGOUT") {
+      handleLogout().then(sendResponse)
+      return true
+    }
+
+    if (message.type === "OPEN_LOGIN") {
+      handleOpenLogin().then(sendResponse)
       return true
     }
   }

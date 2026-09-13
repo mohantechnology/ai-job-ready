@@ -127,7 +127,7 @@ export async function fillFormFields(pageHtml, profile, meta, options = {}) {
     throw new Error("CURSOR_API_KEY is not set");
   }
 
-  const { messages } = await prepareFillRequest(pageHtml, profile, meta);
+  const { messages } = await prepareFillRequest(pageHtml, profile, meta, options);
   const prompt = fillMessagesToPrompt(messages);
   const modelId = process.env.CURSOR_MODEL || "composer-2.5";
 

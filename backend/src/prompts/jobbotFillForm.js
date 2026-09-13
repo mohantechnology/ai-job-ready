@@ -272,8 +272,8 @@ export function fillMessagesToPrompt(messages) {
  * Parse HTML, load the candidate record, and build the shared fill prompt.
  * Used by every LLM provider so they all see the same instructions + schema.
  */
-export async function prepareFillRequest(pageHtml, profile, meta) {
-  const userDetails = await getUserDetails();
+export async function prepareFillRequest(pageHtml, profile, meta, options = {}) {
+  const userDetails = await getUserDetails(options.userId);
   const parsedHtml = parsePageHtml(pageHtml);
   const variants = buildPageFormatVariants(parsedHtml);
 
