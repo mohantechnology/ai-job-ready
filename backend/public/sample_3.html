@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Form Predictor</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --background: #f9fafb;
+            --surface: #ffffff;
+            --text: #111827;
+            --text-light: #6b7280;
+            --border: #e5e7eb;
+            --prediction: #10b981;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--background);
+            color: var(--text);
+            line-height: 1.5;
+            margin: 0;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: var(--surface);
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+            border: 1px solid var(--border);
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 1.25rem;
+            color: var(--text);
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        textarea {
+            width: 100%;
+            height: 300px;
+            font-family: monospace;
+            font-size: 0.87rem;
+            padding: 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            box-sizing: border-box;
+            resize: vertical;
+            background: #fafafa;
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 1rem;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .preview-area {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            background: #fff;
+            min-height: 150px;
+        }
+
+        /* Generated Form Styles */
+        .preview-area form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            position: relative;
+        }
+
+        .form-group label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.95rem;
+            width: 100%;
+            box-sizing: border-box;
+            height: auto;
+        }
+
+        .prediction-badge {
+            font-size: 0.75rem;
+            color: var(--prediction);
+            background: #ecfdf5;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            align-self: flex-start;
+            margin-top: 0.25rem;
+            display: none;
+            font-weight: 500;
+        }
+
+        .instructions {
+            font-size: 0.875rem;
+            color: var(--text-light);
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+<div style="text-align: center; margin-bottom: 2rem;">
+    <h1 style="margin: 0; font-size: 2rem;">💡 HTML Form Predictor & Filler</h1>
+    <p style="color: var(--text-light); margin: 0.5rem 0 0 0;">Paste any HTML form code to instantly parse it and autofill predicted mock data contextually.</p>
+</div>
+
+<div class="container">
+    <!-- Left Input Panel -->
+    <div class="panel">
+        <h2>1. Paste HTML Form</h2>
+        <div class="instructions">Provide your custom structural form elements below:</div>
+        <textarea id="htmlInput" placeholder="<form>&#10;  <label>Email Address</label>&#10;  <input type='email' name='user_email'>&#10;  <label>Country</label>&#10;  <select name='country'>&#10;    <option>USA</option>&#10;    <option>India</option>&#10;  </select>&#10;</form>"></textarea>
+        <button id="processBtn">Parse & Predict Values</button>
+    </div>
+
+    <!-- Right Live Output Panel -->
+    <div class="panel">
+        <h2>2. Predicted Live Form</h2>
+        <div class="instructions">Interactive preview showing interpreted elements filled with predicted smart mock items.</div>
+        <div id="preview" class="preview-area">
+            <p style="color: var(--text-light); text-align: center; margin-top: 3rem;">Rendered form fields with context-aware predictions will display here...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+// Contextual mock data library to predict values based on names, labels, or types
+const predictionEngine = {
+    rules: [
+        { keys: ['email', 'mail'], value: 'johndoe@example.com' },
+        { keys: ['first_name', 'firstname', 'fname'], value: 'John' },
+        { keys: ['last_name', 'lastname', 'lname'], value: 'Doe' },
+        { keys: ['name', 'user', 'fullname'], value: 'John Doe' },
+        { keys: ['phone', 'tel', 'mobile', 'contact'], value: '+1 (555) 019-2834' },
+        { keys: ['company', 'organization', 'firm'], value: 'Acme Corporation' },
+        { keys: ['address', 'street'], value: '123 Main Street, Apt 4B' },
+        { keys: ['city'], value: 'New York' },
+        { keys: ['state', 'province'], value: 'NY' },
+        { keys: ['zip', 'postal', 'postcode'], value: '10001' },
+        { keys: ['country'], value: 'United States' },
+        { keys: ['website', 'url', 'link'], value: 'https://example.com' },
+        { keys: ['subject', 'title'], value: 'Inquiry regarding services' },
+        { keys: ['message', 'comment', 'description', 'bio'], value: 'Hello, I would love to learn more about your platform options. Looking forward to your response!' },
+        { keys: ['age', 'years'], value: '28' },
+        { keys: ['price', 'amount', 'budget'], value: '500' }
+    ],
+    
+    predict: function(type, name, labelText) {
+        const identityString = `${type} ${name} ${labelText}`.toLowerCase();
+        
+        // Match specific rules
+        for (const rule of this.rules) {
+            if (rule.keys.some(key => identityString.includes(key))) {
+                return { value: rule.value, matchType: 'Context Match' };
+            }
+        }
+        
+        // Fallback on standard structural HTML5 types
+        if (type === 'email') return { value: 'test@example.com', matchType: 'Type Fallback' };
+        if (type === 'tel') return { value: '+1234567890', matchType: 'Type Fallback' };
+        if (type === 'url') return { value: 'https://google.com', matchType: 'Type Fallback' };
+        if (type === 'number') return { value: '42', matchType: 'Type Fallback' };
+        if (type === 'date') {
+            const today = new Date().toISOString().split('T')[0];
+            return { value: today, matchType: 'Type Fallback' };
+        }
+        
+        return { value: 'Sample Input', matchType: 'Generic Default' };
+    }
+};
+
+document.getElementById('processBtn').addEventListener('click', () => {
+    const rawHtml = document.getElementById('htmlInput').value.trim();
+    const previewContainer = document.getElementById('preview');
+    
+    if (!rawHtml) {
+        previewContainer.innerHTML = '<p style="color: red; text-align: center;">Please provide valid form HTML code string first.</p>';
+        return;
+    }
+
+    // Set up a sandbox container to parse input safely
+    const sandbox = document.createElement('div');
+    sandbox.innerHTML = rawHtml;
+    
+    // Find editable interactive components
+    const inputs = sandbox.querySelectorAll('input, select, textarea');
+    
+    if (inputs.length === 0) {
+        previewContainer.innerHTML = '<p style="color: red; text-align: center;">No interactive input elements detected in your string snippet.</p>';
+        return;
+    }
+
+    // Wrap elements nicely with prediction indicators
+    inputs.forEach((element) => {
+        const type = element.getAttribute('type') || element.tagName.toLowerCase();
+        const name = element.getAttribute('name') || '';
+        const id = element.getAttribute('id') || '';
+        
+        // Attempt to extract associated label
+        let labelText = '';
+        if (id) {
+            const externalLabel = sandbox.querySelector(`label[for="${id}"]`);
+            if (externalLabel) labelText = externalLabel.textContent;
+        }
+        if (!labelText) {
+            const parentLabel = element.closest('label');
+            if (parentLabel) {
+                labelText = parentLabel.childNodes[0].textContent;
+            } else {
+                // Peek backward structural sibling layout
+                let prev = element.previousElementSibling;
+                if (prev && prev.tagName.toLowerCase() === 'label') {
+                    labelText = prev.textContent;
+                }
+            }
+        }
+
+        // Run prediction matrix
+        if (type !== 'submit' && type !== 'button' && type !== 'checkbox' && type !== 'radio') {
+            const prediction = predictionEngine.predict(type, name, labelText);
+            
+            if (element.tagName.toLowerCase() === 'select') {
+                // Handle matching select dropdown value options contextually
+                const options = element.querySelectorAll('option');
+                let matched = false;
+                for (let opt of options) {
+                    if (opt.text.toLowerCase().includes(prediction.value.toLowerCase()) || 
+                        opt.value.toLowerCase().includes(prediction.value.toLowerCase())) {
+                        opt.selected = true;
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched && options.length > 0) {
+                    options[0].selected = true; // pick standard index if no perfect match
+                }
+            } else {
+                element.value = prediction.value;
+            }
+
+            // Create structural wrapping elements for presentation view UI
+            const wrapper = document.createElement('div');
+            wrapper.className = 'form-group';
+            
+            const newLabel = document.createElement('label');
+            newLabel.textContent = labelText.trim() || `Field (${name || type})`;
+            
+            const badge = document.createElement('div');
+            badge.className = 'prediction-badge';
+            badge.style.display = 'block';
+            badge.textContent = `🔮 Predicted: "${prediction.value}" [${prediction.matchType}]`;
+
+            wrapper.appendChild(newLabel);
+            
+            // Clone the clean element without keeping inside old tree
+            const cleanElement = element.cloneNode(true);
+            // Sync values safely
+            if (element.tagName.toLowerCase() !== 'select') {
+                cleanElement.value = element.value;
+            }
+            wrapper.appendChild(cleanElement);
+            wrapper.appendChild(badge);
+            
+            // Replace the inline raw structure inside the temporary workspace safely
+            element.parentNode.replaceChild(wrapper, element);
+        }
+    });
+
+    // Clear loading placeholder state and show the live layout cleanly
+    previewContainer.innerHTML = '';
+    previewContainer.appendChild(sandbox);
+});
+</script>
+
+</body>
+</html>

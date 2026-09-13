@@ -184,6 +184,78 @@ CREATE TABLE IF NOT EXISTS whiteboard_submissions (
 CREATE INDEX IF NOT EXISTS idx_whiteboard_submissions_interview_id ON whiteboard_submissions(interview_id);
 
 -- ============================================================
+-- user_profile
+-- Job-bot autofill candidate profile, merged in from the standalone
+-- job-bot/backend service (see src/repositories/userProfile.repository.js).
+-- Single row for now (id = 1) - the extension has no login/auth yet, so
+-- there is no per-user FK to `users` yet. `details` is the canonical
+-- profile; `new_details` are facts the candidate later confirmed on real
+-- forms (same shape as the old flat-file userdetails.json this replaces).
+-- TODO: add a `user_id UUID REFERENCES users(id)` column once the
+-- extension gains real auth, and drop the single-row assumption.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_profile (
+  id SERIAL PRIMARY KEY,
+  details JSONB NOT NULL DEFAULT '[]',
+  new_details JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Seed the single row (id = 1) this table uses today, carrying over the
+-- real data that used to live in job-bot/backend/src/data/userdetails.json.
+-- No-op on installs that already have this row.
+INSERT INTO user_profile (id, details, new_details)
+SELECT 1,
+$$[
+  {"label": "First name", "key": "firstName", "answer": [{"value": "Mohan"}]},
+  {"label": "Middle name", "key": "middleName", "answer": [{"value": "raj"}]},
+  {"label": "Last name", "key": "lastName", "answer": [{"value": "khanna"}]},
+  {"label": "Email", "key": "email", "answer": [{"value": "mohan@gm.com"}]},
+  {"label": "Phone", "key": "phone", "answer": [{"value": "+91-9840000000"}]},
+  {"label": "Location", "key": "location", "answer": [{"value": "Bangalore, Karnataka, India"}]},
+  {"label": "LinkedIn URL", "key": "linkedinUrl", "answer": [{"value": "https://linkedin.com/in/mohan-kannan-0000000000"}]},
+  {"label": "GitHub Profile", "key": "githubProfile", "answer": [{"value": "https://github.com/mohan-kannan"}]},
+  {"label": "Portfolio", "key": "portfolio", "answer": [{"value": "https://mohan-kannan.dev"}]},
+  {"label": "Current title", "key": "currentTitle", "answer": [{"value": "Full Stack Developer"}]},
+  {"label": "Years of experience", "key": "yearsOfExperience", "answer": [{"value": "3"}]},
+  {"label": "Desired position", "key": "desiredPosition", "answer": [{"value": "Software Engineer"}]},
+  {"label": "Available start date", "key": "availableStartDate", "answer": [{"value": "Immediate"}]},
+  {"label": "Expected salary", "key": "expectedSalary", "answer": [{"value": "Negotiable"}]},
+  {"label": "Work authorization", "key": "workAuthorization", "answer": [{"value": "Authorized to work in the India"}]},
+  {"label": "Requires sponsorship", "key": "requiresSponsorship", "answer": [{"value": "No"}]},
+  {"label": "Education", "key": "education", "answer": [{"value": "B.Tech in Computer Science, CSVTU, 2023"}]},
+  {"label": "Degree", "key": "degree", "answer": [{"value": "B.Tech in Computer Science"}]},
+  {"label": "School", "key": "school", "answer": [{"value": "CSVTU"}]},
+  {"label": "Graduation year", "key": "graduationYear", "answer": [{"value": "2023"}]},
+  {"label": "Skills", "key": "skills", "answer": [{"value": "JavaScript"}, {"value": "TypeScript"}, {"value": "React"}, {"value": "Node.js"}, {"value": "Python"}, {"value": "SQL"}]},
+  {"label": "Gender identity", "key": "genderIdentity", "answer": [{"value": "Male"}]},
+  {"label": "Race", "key": "race", "answer": [{"value": "Asian"}]},
+  {"label": "Ethnicity", "key": "ethnicity", "answer": [{"value": "Indian"}]},
+  {"label": "Disability", "key": "disability", "answer": [{"value": "No"}]},
+  {"label": "Veteran status", "key": "veteranStatus", "answer": [{"value": "No"}]},
+  {"label": "Summary", "key": "summary", "answer": [{"value": "Full-stack engineer with 4+ years of experience building and shipping web applications end-to-end, from React frontends to Node.js APIs."}]},
+  {"label": "Cover letter", "key": "coverLetterTemplate", "answer": [{"value": "I'm excited to apply for this role because it lines up closely with my background in full-stack web development. I'd welcome the chance to bring that experience to your team."}]}
+]$$::jsonb,
+$$[
+  {"label": "Hide jobs which require me to apply on the company's website", "key": "hideJobsWhichRequireMeToApplyOn", "answer": [{"value": "No"}]}
+]$$::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM user_profile WHERE id = 1);
+
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $trigger$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$trigger$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS user_profile_set_updated_at ON user_profile;
+CREATE TRIGGER user_profile_set_updated_at
+BEFORE UPDATE ON user_profile
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ============================================================
 -- session
 -- Backing store for express-session (via connect-pg-simple), so login
 -- sessions survive a backend restart instead of living only in memory.

@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => {
     env.FRONTEND_URL ||
     "http://localhost:6101";
   const allowedHosts = parseAllowedHosts(frontendUrl);
-
+  console.log("frontendUrl", allowedHosts);
   const apiProxy = {
     "/api": {
       target: apiProxyTarget,

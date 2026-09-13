@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application Form</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+        .form-container {
+            max-width: 500px;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="checkbox"], input[type="radio"] {
+            width: auto;
+            margin-right: 10px;
+        }
+        .radio-group, .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        button {
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+<div class="form-container">
+    <h2>Job Application Form</h2>
+    <form>
+        
+        <!-- Text Input -->
+        <div class="form-group">
+            <label for="full-name">Full Name</label>
+            <input type="text" id="full-name" name="full-name" required placeholder="John Doe">
+        </div>
+
+        <!-- Email Input -->
+        <div class="form-group">
+            <label for="email">Email Address</label>
+            <input type="email" id="email" name="email" required placeholder="johndoe@example.com">
+        </div>
+
+        <!-- Phone Input -->
+        <div class="form-group">
+            <label for="phone">Phone Number</label>
+            <input type="tel" id="phone" name="phone" placeholder="123-456-7890">
+        </div>
+
+        <!-- Date Input -->
+        <div class="form-group">
+            <label for="start-date">Available Start Date</label>
+            <input type="date" id="start-date" name="start-date">
+        </div>
+
+        <!-- Dropdown Select -->
+        <div class="form-group">
+            <label for="position">Desired Position</label>
+            <select id="position" name="position">
+                <option value="">--Select a Position--</option>
+                <option value="developer">Software Developer</option>
+                <option value="designer">UI/UX Designer</option>
+                <option value="manager">Project Manager</option>
+            </select>
+        </div>
+
+        <!-- Radio Buttons -->
+        <div class="form-group">
+            <label>Work Preference</label>
+            <div class="radio-group">
+                <input type="radio" id="remote" name="work-type" value="remote">
+                <label for="remote">Remote</label>
+            </div>
+            <div class="radio-group">
+                <input type="radio" id="onsite" name="work-type" value="onsite">
+                <label for="onsite">On-site</label>
+            </div>
+        </div>
+
+        <!-- File Upload -->
+        <div class="form-group">
+            <label for="resume">Upload Resume (PDF)</label>
+            <input type="file" id="resume" name="resume" accept=".pdf">
+        </div>
+
+        <!-- Textarea -->
+        <div class="form-group">
+            <label for="cover-letter">Cover Letter / Cover Notes</label>
+            <textarea id="cover-letter" name="cover-letter" rows="4" placeholder="Tell us why you are a good fit..."></textarea>
+        </div>
+
+        <!-- Checkbox -->
+        <div class="form-group">
+            <div class="checkbox-group">
+                <input type="checkbox" id="terms" name="terms" required>
+                <label for="terms">I agree to the terms and conditions</label>
+            </div>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit">Submit Application</button>
+
+    </form>
+</div>
+
+</body>
+</html>

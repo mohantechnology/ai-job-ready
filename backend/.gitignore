@@ -1,3 +1,8 @@
 node_modules
 .env
 *.log
+# Job-bot autofill (merged from job-bot/backend): test-only dumps of the
+# last fill request (see src/lib/jobbotHtmlParser.js).
+output/*
+# Cursor SDK local agent store (JSONL fallback when node:sqlite is missing).
+.cursor-agent-store/

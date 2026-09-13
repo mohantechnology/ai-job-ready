@@ -33,4 +33,8 @@ export const env = {
   jwtSecret: process.env.JWT_SECRET || "dev-insecure-jwt-secret-change-me",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
   sessionSecret: process.env.SESSION_SECRET || "dev-insecure-session-secret-change-me",
+  // Job-bot autofill (merged from job-bot/backend) - used by
+  // services/jobbotCursor.service.js for the extension's fill/cursor stream.
+  cursorApiKey: process.env.CURSOR_API_KEY || "",
+  cursorModel: process.env.CURSOR_MODEL || "composer-2.5",
 };
