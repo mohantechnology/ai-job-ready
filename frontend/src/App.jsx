@@ -1,11 +1,14 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
+import AppLayout from "./components/layout/AppLayout.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
 import SetupWizard from "./pages/SetupWizard.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Progress from "./pages/Progress.jsx";
+import AppliedJobs from "./pages/AppliedJobs.jsx";
+import JobProfile from "./pages/JobProfile.jsx";
 import MicCheck from "./pages/MicCheck.jsx";
 import Interview from "./pages/Interview.jsx";
 import Results from "./pages/Results.jsx";
@@ -27,21 +30,18 @@ export default function App() {
             }
           />
           <Route
-            path="/dashboard"
             element={
               <RequireAuth>
-                <Dashboard />
+                <AppLayout />
               </RequireAuth>
             }
-          />
-          <Route
-            path="/progress"
-            element={
-              <RequireAuth>
-                <Progress />
-              </RequireAuth>
-            }
-          />
+          >
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/progress" element={<Progress />} />
+            <Route path="/applied-jobs" element={<AppliedJobs />} />
+            <Route path="/job-profile" element={<JobProfile />} />
+          </Route>
+
           <Route
             path="/mic-check/:id"
             element={

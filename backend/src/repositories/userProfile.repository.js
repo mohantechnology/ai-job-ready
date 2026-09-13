@@ -168,3 +168,57 @@ export async function saveNewDetails(fields) {
 export async function saveAdditionalAnswer(label, value) {
   return saveNewDetails([{ label, key: keyFromLabel(label), answer: [{ value }] }]);
 }
+
+/**
+ * Upserts fields into the canonical `details` list (as opposed to
+ * `saveNewDetails`, which only touches `newDetails`). This is what backs the
+ * editable "Job profile" screen in the voice-bot frontend - edits made there
+ * are meant to update the source-of-truth profile, not just log a confirmed
+ * form answer.
+ * Match by `key`, then by normalized label, so editing an existing question
+ * updates it in place instead of duplicating it.
+ * @param {object[]} fields
+ * @returns {Promise<{details: object[], newDetails: object[]}>}
+ */
+export async function saveCanonicalDetails(fields) {
+  const incoming = (Array.isArray(fields) ? fields : [])
+    .map(normalizeDetailField)
+    .filter(Boolean);
+  if (incoming.length === 0) {
+    throw new Error("At least one field with `label` and a non-empty `answer` is required");
+  }
+
+  const { details: existing, newDetails } = await getUserDetails();
+  const details = [...existing];
+
+  for (const field of incoming) {
+    const index = findExistingIndex(details, field);
+    if (index >= 0) {
+      details[index] = field;
+    } else {
+      details.push(field);
+    }
+  }
+
+  return writeUserDetails(details, newDetails);
+}
+
+/**
+ * Removes a single field (by `key`) from the canonical `details` list.
+ * @param {string} key
+ * @returns {Promise<{details: object[], newDetails: object[]}>}
+ */
+export async function deleteCanonicalDetail(key) {
+  const trimmedKey = asTrimmedString(key, MAX_KEY_LENGTH);
+  if (!trimmedKey) {
+    throw new Error("`key` is required");
+  }
+
+  const { details: existing, newDetails } = await getUserDetails();
+  const details = existing.filter((field) => field?.key !== trimmedKey);
+  if (details.length === existing.length) {
+    throw new Error(`No profile field found with key "${trimmedKey}"`);
+  }
+
+  return writeUserDetails(details, newDetails);
+}

@@ -83,7 +83,7 @@ function buildChartPaths(points, width, height, padX = 8, padY = 16) {
 
 export default function Progress() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [range, setRange] = useState("this_week");
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -137,47 +137,25 @@ export default function Progress() {
     return [...topics].sort((a, b) => a.avgScore - b.avgScore)[0];
   }, [data]);
 
-  async function handleLogout() {
-    await logout();
-    navigate("/login", { replace: true });
-  }
-
   const summary = data?.summary;
   const avg = summary?.avgOverallScore;
   const hasActivity = summary && summary.interviewsCompleted > 0;
 
   return (
-    <div className="progress-mesh relative min-h-screen overflow-hidden">
+    <div className="progress-mesh relative min-h-full overflow-hidden">
       <div className="progress-orb pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-teal-400/10 blur-3xl" />
       <div className="progress-orb pointer-events-none absolute -right-16 top-40 h-80 w-80 rounded-full bg-sky-500/10 blur-3xl [animation-delay:-4s]" />
 
       <div className="relative mx-auto flex w-full max-w-4xl flex-col px-4 pb-16 pt-8 sm:px-6 sm:pt-10">
         {/* Top nav */}
-        <header className="mb-10 flex items-center justify-between gap-4 animate-[fade-up_0.6s_cubic-bezier(0.22,1,0.36,1)_both]">
+        <header className="mb-10 flex items-center justify-end gap-4 animate-[fade-up_0.6s_cubic-bezier(0.22,1,0.36,1)_both]">
           <button
             type="button"
-            onClick={() => navigate("/dashboard")}
-            className="group flex items-center gap-2 text-sm text-slate-400 transition hover:text-slate-200"
+            onClick={() => navigate("/")}
+            className="rounded-xl bg-gradient-to-r from-teal-400 to-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110"
           >
-            <span className="inline-block transition group-hover:-translate-x-0.5">←</span>
-            Interviews
+            Practice again
           </button>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => navigate("/")}
-              className="rounded-xl bg-gradient-to-r from-teal-400 to-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110"
-            >
-              Practice again
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-400 backdrop-blur transition hover:border-white/20 hover:text-slate-200"
-            >
-              Log out
-            </button>
-          </div>
         </header>
 
         {/* Hero */}

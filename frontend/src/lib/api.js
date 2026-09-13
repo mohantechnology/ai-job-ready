@@ -82,6 +82,25 @@ export function getLatestResume() {
   return request("/interviews/resume/latest");
 }
 
+// Job profile - AI/extension-confirmed candidate facts (each question can
+// have multiple saved answers), editable from the "Job profile" tab.
+export function getUserProfile() {
+  return request("/user/profile");
+}
+
+export function updateUserProfile(fields) {
+  return request("/user/profile", {
+    method: "PUT",
+    body: JSON.stringify({ fields }),
+  });
+}
+
+export function deleteUserProfileField(key) {
+  return request(`/user/profile/${encodeURIComponent(key)}`, {
+    method: "DELETE",
+  });
+}
+
 export function createRealtimeToken(interviewId) {
   return request("/realtime/token", {
     method: "POST",

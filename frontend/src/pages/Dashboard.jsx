@@ -6,7 +6,7 @@ import InterviewCard from "../components/InterviewCard.jsx";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [interviews, setInterviews] = useState(null);
   const [error, setError] = useState("");
 
@@ -24,15 +24,10 @@ export default function Dashboard() {
     }
   }
 
-  async function handleLogout() {
-    await logout();
-    navigate("/login", { replace: true });
-  }
-
   return (
-    <div className="flex min-h-screen flex-col items-center px-4 py-10">
+    <div className="flex min-h-full flex-col items-center px-4 py-10 sm:px-8">
       <div className="w-full max-w-3xl">
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-white">Your interviews</h1>
             <p className="mt-1 text-sm text-slate-400">
@@ -40,26 +35,12 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {/* <button
-              type="button"
-              onClick={() => navigate("/progress")}
-              className="rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-indigo-400/50 hover:text-indigo-300"
-            >
-              Progress
-            </button> */}
             <button
               type="button"
               onClick={() => navigate("/")}
               className="rounded-lg bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-400"
             >
               + New interview
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-red-400/50 hover:text-red-300"
-            >
-              Log out
             </button>
           </div>
         </div>

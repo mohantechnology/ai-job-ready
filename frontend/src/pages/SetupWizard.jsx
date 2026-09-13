@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import WizardShell from "../components/wizard/WizardShell.jsx";
 import OptionCard from "../components/wizard/OptionCard.jsx";
 import TagInput from "../components/wizard/TagInput.jsx";
@@ -47,13 +47,17 @@ const TOTAL_STEPS = 8;
 
 export default function SetupWizard() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // If we arrived here from an "Applied jobs" card, use its details to
+  // pre-fill the job title and topics so the wizard starts one step ahead.
+  const prefill = location.state || null;
 
   const [step, setStep] = useState(1);
-  const [jobTitle, setJobTitle] = useState("");
+  const [jobTitle, setJobTitle] = useState(prefill?.prefillJobTitle || "");
   const [role, setRole] = useState("");
   const [typeOfInterview, setTypeOfInterview] = useState("");
   const [typeOfInterviewOther, setTypeOfInterviewOther] = useState("");
-  const [topics, setTopics] = useState([]);
+  const [topics, setTopics] = useState(prefill?.prefillTopics || []);
   const [numberOfQuestions, setNumberOfQuestions] = useState(5);
 
   const [existingResumeText, setExistingResumeText] = useState("");
@@ -282,6 +286,13 @@ export default function SetupWizard() {
       {error && (
         <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
           {error}
+        </div>
+      )}
+
+      {step === 1 && prefill?.prefillJobTitle && (
+        <div className="mb-4 rounded-lg border border-indigo-400/30 bg-indigo-500/10 px-3 py-2 text-sm text-indigo-200">
+          Pre-filled from your application{prefill.prefillCompany ? ` to ${prefill.prefillCompany}` : ""}. Feel free to
+          adjust anything below.
         </div>
       )}
 
