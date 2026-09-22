@@ -41,24 +41,31 @@ const TOPIC_SUGGESTIONS = ["React", "JavaScript", "HTML", "CSS", "Node.js", "Sys
 const MAX_TOPICS = 20;
 const MIN_QUESTIONS = 1;
 const MAX_QUESTIONS = 29;
-const MAX_ADDITIONAL_INFO_LENGTH = 2000;
+const MAX_ADDITIONAL_INFO_LENGTH = 8000;
 
 const TOTAL_STEPS = 8;
 
 export default function SetupWizard() {
   const navigate = useNavigate();
   const location = useLocation();
-  // If we arrived here from an "Applied jobs" card, use its details to
-  // pre-fill the job title and topics so the wizard starts one step ahead.
+  // Arriving from an applied job with autofill off. The practice modal
+  // passes the saved role, level, skills, and (when requested) web research.
   const prefill = location.state || null;
+  const prefillRole = ["junior", "mid", "senior"].includes(prefill?.prefillRole) ? prefill.prefillRole : "";
+  const prefillType = ["technical", "non-technical", "mix", "other"].includes(prefill?.prefillType) ? prefill.prefillType : "";
+  const prefillTopics = Array.isArray(prefill?.prefillTopics)
+    ? prefill.prefillTopics.filter((topic) => typeof topic === "string" && topic.trim())
+    : [];
 
   const [step, setStep] = useState(1);
   const [jobTitle, setJobTitle] = useState(prefill?.prefillJobTitle || "");
-  const [role, setRole] = useState("");
-  const [typeOfInterview, setTypeOfInterview] = useState("");
+  const [role, setRole] = useState(prefillRole);
+  const [typeOfInterview, setTypeOfInterview] = useState(prefillType);
   const [typeOfInterviewOther, setTypeOfInterviewOther] = useState("");
-  const [topics, setTopics] = useState(prefill?.prefillTopics || []);
-  const [numberOfQuestions, setNumberOfQuestions] = useState(5);
+  const [topics, setTopics] = useState(prefillTopics);
+  const [numberOfQuestions, setNumberOfQuestions] = useState(
+    Number.isInteger(prefill?.prefillNumberOfQuestions) ? prefill.prefillNumberOfQuestions : 5
+  );
 
   const [existingResumeText, setExistingResumeText] = useState("");
   const [isLoadingExistingResume, setIsLoadingExistingResume] = useState(true);
@@ -71,7 +78,9 @@ export default function SetupWizard() {
   const [resumeModeBeforeEdit, setResumeModeBeforeEdit] = useState(null);
   const [resumeTextBeforeEdit, setResumeTextBeforeEdit] = useState("");
 
-  const [additionalInfo, setAdditionalInfo] = useState("");
+  const [additionalInfo, setAdditionalInfo] = useState(
+    typeof prefill?.prefillAdditionalInfo === "string" ? prefill.prefillAdditionalInfo.slice(0, MAX_ADDITIONAL_INFO_LENGTH) : ""
+  );
   const [assistanceLevel, setAssistanceLevel] = useState("on_request");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -129,6 +138,7 @@ export default function SetupWizard() {
         resumeText: resumeMode === "skipped" ? undefined : resumeText,
         additionalInfo: additionalInfo.trim() || undefined,
         assistanceLevel,
+        appliedJobId: prefill?.prefillAppliedJobId || undefined,
       });
       navigate("/dashboard");
     } catch (err) {
@@ -291,8 +301,10 @@ export default function SetupWizard() {
 
       {step === 1 && prefill?.prefillJobTitle && (
         <div className="mb-4 rounded-lg border border-indigo-400/30 bg-indigo-500/10 px-3 py-2 text-sm text-indigo-200">
-          Pre-filled from your application{prefill.prefillCompany ? ` to ${prefill.prefillCompany}` : ""}. Feel free to
-          adjust anything below.
+          Pre-filled from your application{prefill.prefillCompany ? ` to ${prefill.prefillCompany}` : ""}.
+          {prefill.prefillHasResearch
+            ? " Web research is in the additional-details step. Change anything before creating the interview."
+            : " Change anything before creating the interview."}
         </div>
       )}
 
@@ -490,6 +502,14 @@ export default function SetupWizard() {
 
           {resumeError && <p className="mt-3 text-sm text-red-400">{resumeError}</p>}
         </div>
+      )}
+
+      {step === 7 && prefill?.prefillAdditionalInfo && (
+        <p className="mb-3 text-sm text-indigo-200">
+          {prefill.prefillHasResearch
+            ? "Filled from web research on this company and role, plus the saved posting. Edit anything that should not shape the questions."
+            : "Filled from the saved job posting. Edit anything that should not shape the questions."}
+        </p>
       )}
 
       {step === 7 && (

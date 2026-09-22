@@ -39,4 +39,7 @@ export const env = {
   cursorModel: process.env.CURSOR_MODEL || "composer-2.5",
   // Resume prefill provider. "cursor" (default) or "openai".
   profilePrefillProvider: process.env.PROFILE_PREFILL_PROVIDER || "cursor",
+  // Applied-job extraction provider. "cursor" (default) or "openai".
+  // Switch this in backend/.env and restart the backend. No UI for it.
+  jobExtractProvider: process.env.JOB_EXTRACT_PROVIDER || "cursor",
 };

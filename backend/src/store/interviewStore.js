@@ -50,6 +50,7 @@ function mapRow(row) {
             topics: row.summary_topics,
           }
         : null,
+    appliedJobId: row.applied_job_id || null,
     createdAt: row.created_at,
     startedAt: row.started_at,
     completedAt: row.completed_at,
@@ -67,13 +68,15 @@ export async function createInterview({
   resumeText,
   additionalInfo,
   assistanceLevel,
+  appliedJobId,
 }) {
   const result = await query(
     `INSERT INTO interviews (
        user_id, job_title, role, type_of_interview, type_of_interview_other,
-       topics, number_of_questions, resume_text, additional_info, assistance_level
+       topics, number_of_questions, resume_text, additional_info, assistance_level,
+       applied_job_id
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       userId,
@@ -86,6 +89,7 @@ export async function createInterview({
       resumeText || null,
       additionalInfo || null,
       assistanceLevel || "on_request",
+      appliedJobId || null,
     ]
   );
   return mapRow(result.rows[0]);

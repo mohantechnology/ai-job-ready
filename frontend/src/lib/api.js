@@ -105,6 +105,30 @@ export function listInterviews() {
   return request("/interviews");
 }
 
+export function listAppliedJobs() {
+  return request("/applied-jobs");
+}
+
+export function updateAppliedJobStatus(id, status) {
+  return request(`/applied-jobs/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function createPracticeInterview(appliedJobId, { research = false } = {}) {
+  return request(`/applied-jobs/${appliedJobId}/interviews`, {
+    method: "POST",
+    body: JSON.stringify({ research }),
+  });
+}
+
+export function researchAppliedJob(appliedJobId) {
+  return request(`/applied-jobs/${appliedJobId}/research`, {
+    method: "POST",
+  });
+}
+
 // Learning progress aggregated across completed interviews.
 // range: this_week | last_week | this_month | last_month | all
 export function getProgress(range = "this_week") {

@@ -11,7 +11,8 @@ const MAX_QUESTIONS = 29;
 const MAX_JOB_TITLE_LENGTH = 100;
 const MAX_TYPE_OTHER_LENGTH = 100;
 const MAX_RESUME_TEXT_LENGTH = 6000;
-const MAX_ADDITIONAL_INFO_LENGTH = 2000;
+const MAX_ADDITIONAL_INFO_LENGTH = 8000;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function validateInterviewInput(body = {}) {
   const {
@@ -24,6 +25,7 @@ export function validateInterviewInput(body = {}) {
     resumeText,
     additionalInfo,
     assistanceLevel,
+    appliedJobId,
   } = body;
 
   if (typeof jobTitle !== "string" || !jobTitle.trim()) {
@@ -86,6 +88,14 @@ export function validateInterviewInput(body = {}) {
     normalizedAdditionalInfo = additionalInfo.trim() || null;
   }
 
+  let normalizedAppliedJobId = null;
+  if (appliedJobId != null && appliedJobId !== "") {
+    if (typeof appliedJobId !== "string" || !UUID_RE.test(appliedJobId)) {
+      throw new ApiError(400, "appliedJobId must be a uuid");
+    }
+    normalizedAppliedJobId = appliedJobId;
+  }
+
   let normalizedAssistanceLevel = DEFAULT_ASSISTANCE_LEVEL;
   if (assistanceLevel !== undefined && assistanceLevel !== null && assistanceLevel !== "") {
     if (!VALID_ASSISTANCE_LEVELS.includes(assistanceLevel)) {
@@ -104,5 +114,6 @@ export function validateInterviewInput(body = {}) {
     resumeText: normalizedResumeText,
     additionalInfo: normalizedAdditionalInfo,
     assistanceLevel: normalizedAssistanceLevel,
+    appliedJobId: normalizedAppliedJobId,
   };
 }

@@ -280,3 +280,49 @@ CREATE TABLE IF NOT EXISTS session (
 );
 
 CREATE INDEX IF NOT EXISTS idx_session_expire ON session(expire);
+
+-- ============================================================
+-- applied_jobs
+-- One row per saved job posting. The extension sends the page HTML;
+-- an LLM (Cursor or OpenAI, chosen by JOB_EXTRACT_PROVIDER) extracts
+-- the fields shown on the Applied jobs page. Saving the same URL again
+-- refreshes those fields and keeps status plus any practice interviews.
+-- page_html is the stripped page that extraction actually read.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS applied_jobs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source_url TEXT NOT NULL,
+  source_key TEXT NOT NULL,
+  page_title TEXT NOT NULL DEFAULT '',
+  page_html TEXT NOT NULL DEFAULT '',
+  page_meta JSONB NOT NULL DEFAULT '{}',
+  company TEXT NOT NULL DEFAULT '',
+  role TEXT NOT NULL DEFAULT '',
+  level TEXT NOT NULL DEFAULT 'mid' CHECK (level IN ('junior', 'mid', 'senior')),
+  location TEXT NOT NULL DEFAULT '',
+  work_mode TEXT NOT NULL DEFAULT '',
+  salary TEXT NOT NULL DEFAULT '',
+  topics JSONB NOT NULL DEFAULT '[]',
+  summary TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'applied' CHECK (status IN ('applied', 'interviewed', 'offered', 'rejected')),
+  extraction JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_applied_jobs_user_source_key ON applied_jobs (user_id, source_key);
+CREATE INDEX IF NOT EXISTS idx_applied_jobs_user_created ON applied_jobs (user_id, created_at DESC);
+
+DROP TRIGGER IF EXISTS applied_jobs_set_updated_at ON applied_jobs;
+CREATE TRIGGER applied_jobs_set_updated_at
+BEFORE UPDATE ON applied_jobs
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Practice interviews created from an applied job. Several interviews
+-- can point at the same job. Deleting the job keeps the interviews.
+ALTER TABLE interviews
+  ADD COLUMN IF NOT EXISTS applied_job_id UUID REFERENCES applied_jobs(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_interviews_applied_job_id ON interviews (applied_job_id);

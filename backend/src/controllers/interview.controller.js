@@ -9,10 +9,17 @@ import {
 import { saveQuestions, getQuestionsForInterview } from "../repositories/interviewQuestions.repository.js";
 import { listWhiteboardSubmissionsForInterview } from "../repositories/whiteboardSubmissions.repository.js";
 import { generateInterviewQuestions } from "../services/questionGeneration.service.js";
+import { getAppliedJob } from "../repositories/appliedJob.repository.js";
 import { validateInterviewInput } from "../utils/validateInterviewInput.js";
 
 export async function createInterviewHandler(req, res) {
   const input = validateInterviewInput(req.body);
+  if (input.appliedJobId) {
+    const job = await getAppliedJob(input.appliedJobId, req.userId);
+    if (!job) {
+      throw new ApiError(404, "Applied job not found");
+    }
+  }
   const interview = await createInterview({ ...input, userId: req.userId });
 
   // Best-effort: pre-generate the question list with an LLM so the realtime

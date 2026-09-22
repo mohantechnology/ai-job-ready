@@ -14,6 +14,7 @@ import webhookRoutes from "./routes/webhook.routes.js";
 import jobbotFormRoutes from "./routes/jobbotForm.routes.js";
 import jobbotProfileRoutes from "./routes/jobbotProfile.routes.js";
 import jobbotFormsPagesRoutes from "./routes/jobbotForms.routes.js";
+import appliedJobRoutes from "./routes/appliedJob.routes.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
@@ -61,6 +62,7 @@ app.use("/api/webhook", webhookRoutes);
 // Merged in from job-bot/backend - the job-bot browser extension's autofill
 // backend. /api/form/fill/cursor and /api/user/save-details are the two
 // endpoints the extension actually calls, both behind JWT auth.
+app.use("/api/applied-jobs", appliedJobRoutes);
 app.use("/api/form", jobbotFormRoutes);
 app.use("/api/user", jobbotProfileRoutes);
 // Test-only debug viewer: /forms/sample.html (stable) and /forms/<dump> from
