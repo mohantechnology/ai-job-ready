@@ -5,8 +5,8 @@ import type { PlasmoCSConfig } from "plasmo"
 
 import { getAdapterForHostname } from "~adapters"
 import { ACCESS_TOKEN_KEY, isWebOrigin } from "~lib/auth"
-import type { ExtensionMessage } from "~lib/messaging"
-import { requestFillFromBackground, sendMessageWithTimeout } from "~lib/messaging"
+import type { ExtensionMessage, PageMeta, SaveJobResult } from "~lib/messaging"
+import { FILL_REQUEST_TIMEOUT_MS, requestFillFromBackground, sendMessageWithTimeout } from "~lib/messaging"
 
 // Same broad matches as the field-detection content script - this panel is
 // the primary way users trigger a fill, so it needs to be present anywhere
@@ -17,6 +17,36 @@ export const config: PlasmoCSConfig = {
 }
 
 type FillStatus = "idle" | "filling" | "done" | "error"
+type SaveStatus = "idle" | "saving" | "done" | "error"
+
+const MAX_PAGE_HTML_CHARS = 2_000_000
+
+function metaContent(selector: string): string | undefined {
+  const content = document.querySelector(selector)?.getAttribute("content")?.trim()
+  return content || undefined
+}
+
+function capturePageMeta(): PageMeta {
+  const description = metaContent('meta[name="description"]')
+  const ogTitle = metaContent('meta[property="og:title"]')
+  const ogSiteName = metaContent('meta[property="og:site_name"]')
+  const ogDescription = metaContent('meta[property="og:description"]')
+  const heading = document.querySelector("h1")?.textContent?.trim()
+  return {
+    url: window.location.href,
+    title: document.title?.trim() || "",
+    ...(description ? { description } : {}),
+    ...(ogTitle ? { ogTitle } : {}),
+    ...(ogSiteName ? { ogSiteName } : {}),
+    ...(ogDescription ? { ogDescription } : {}),
+    ...(heading ? { heading } : {})
+  }
+}
+
+function capturePageHtml(): string {
+  const html = document.documentElement?.outerHTML || document.body?.outerHTML || ""
+  return html.length > MAX_PAGE_HTML_CHARS ? html.slice(0, MAX_PAGE_HTML_CHARS) : html
+}
 
 const FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
@@ -114,6 +144,8 @@ function JobBotPanel() {
   const [loggedIn, setLoggedIn] = useState(false)
   const [status, setStatus] = useState<FillStatus>("idle")
   const [errorMessage, setErrorMessage] = useState("")
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle")
+  const [saveMessage, setSaveMessage] = useState("")
   const streamedRef = useRef(false)
   const adapter = getAdapterForHostname(window.location.hostname)
   const onWebsite = isWebOrigin(window.location.origin)
@@ -203,11 +235,30 @@ function JobBotPanel() {
     }
   }
 
-  function handleSaveJob() {
-    // Placeholder until job tracking (task.txt) lands - just acknowledges
-    // the click for now.
-    setStatus("done")
-    setTimeout(() => setStatus("idle"), 1500)
+  async function handleSaveJob() {
+    if (!loggedIn) {
+      await sendMessageWithTimeout({ type: "OPEN_LOGIN" }, 5000)
+      return
+    }
+    setSaveStatus("saving")
+    setSaveMessage("")
+    try {
+      const result = await sendMessageWithTimeout<SaveJobResult>(
+        { type: "SAVE_JOB", pageHtml: capturePageHtml(), meta: capturePageMeta() },
+        FILL_REQUEST_TIMEOUT_MS
+      )
+      if (result?.ok) {
+        const label = [result.role, result.company].filter(Boolean).join(" at ")
+        setSaveMessage(result.created ? `Saved${label ? ` ${label}` : ""}.` : `Updated${label ? ` ${label}` : ""}.`)
+        setSaveStatus("done")
+      } else {
+        setSaveMessage(result?.error || "Could not save this job.")
+        setSaveStatus("error")
+      }
+    } catch (err) {
+      setSaveMessage(err instanceof Error ? err.message : "Could not save this job.")
+      setSaveStatus("error")
+    }
   }
 
   if (onWebsite) {
@@ -250,9 +301,20 @@ function JobBotPanel() {
               ? "⚡ Autofill"
               : "Sign in to autofill"}
         </button>
-        <button type="button" onClick={handleSaveJob} style={secondaryButtonStyle}>
-          💾 Save job
+        <button
+          type="button"
+          onClick={handleSaveJob}
+          disabled={saveStatus === "saving"}
+          style={secondaryButtonStyle}>
+          {saveStatus === "saving" ? "Saving job..." : loggedIn ? "💾 Save job" : "Sign in to save job"}
         </button>
+        {saveStatus === "saving" && (
+          <p style={statusStyle("#6b7280")}>Reading this page. This can take a minute.</p>
+        )}
+        {saveStatus === "done" && <p style={statusStyle("#16a34a")}>{saveMessage}</p>}
+        {saveStatus === "error" && (
+          <p style={statusStyle("#dc2626")}>{saveMessage || "Could not save this job."}</p>
+        )}
         {status === "filling" && (
           <p style={statusStyle("#6b7280")}>This can take a few minutes.</p>
         )}

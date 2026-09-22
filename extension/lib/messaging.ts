@@ -220,6 +220,21 @@ export type OpenLoginMessage = {
   type: "OPEN_LOGIN"
 }
 
+/** On-page panel → background: extract this posting and save it as an applied job. */
+export type SaveJobMessage = {
+  type: "SAVE_JOB"
+  pageHtml: string
+  meta: PageMeta
+}
+
+export type SaveJobResult = {
+  ok: boolean
+  created?: boolean
+  error?: string
+  role?: string
+  company?: string
+}
+
 export type ExtensionMessage =
   | FieldsDetectedMessage
   | RequestFillMessage
@@ -231,6 +246,7 @@ export type ExtensionMessage =
   | GetAuthMessage
   | LogoutMessage
   | OpenLoginMessage
+  | SaveJobMessage
 
 export type BackendFillRequest = {
   pageHtml: string

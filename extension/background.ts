@@ -16,6 +16,7 @@ import type {
   PageMeta,
   RequestFillResult,
   SaveAnswerResult,
+  SaveJobResult,
   UserDetailField
 } from "~lib/messaging"
 import { FILL_REQUEST_TIMEOUT_MS, LAST_FILL_RESULT_KEY } from "~lib/messaging"
@@ -394,6 +395,62 @@ function keyFromLabel(label: string): string {
     .join("")
 }
 
+async function handleSaveJob(pageHtml: string, meta: PageMeta): Promise<SaveJobResult> {
+  const stopKeepAlive = startKeepAlive()
+  try {
+    if (typeof pageHtml !== "string" || pageHtml.trim().length < 40) {
+      return { ok: false, error: "This page does not have enough content to save." }
+    }
+
+    const auth = await getAuthHeaders()
+    if (!auth) {
+      return { ok: false, error: "Sign in to JobReady to save jobs." }
+    }
+
+    const apiBaseUrl = await getApiBaseUrl()
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), FILL_FETCH_TIMEOUT_MS)
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/applied-jobs`, {
+        method: "POST",
+        headers: auth.headers,
+        body: JSON.stringify({ pageHtml, meta }),
+        signal: controller.signal
+      })
+      if (response.status === 401) {
+        await handleUnauthorized()
+        return { ok: false, error: "Your session expired. Sign in again to continue." }
+      }
+      const data = await response.json().catch(() => null)
+      if (!response.ok) {
+        const message =
+          (typeof data?.error === "string" ? data.error : data?.error?.message) ||
+          `Backend responded with ${response.status}`
+        return { ok: false, error: message }
+      }
+      return {
+        ok: true,
+        created: Boolean(data?.created),
+        role: typeof data?.job?.role === "string" ? data.job.role : undefined,
+        company: typeof data?.job?.company === "string" ? data.job.company : undefined
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return { ok: false, error: "Saving this job took too long. Please try again." }
+      }
+      console.error("[job-bot] failed to save job:", err)
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "Unknown error while saving this job."
+      }
+    } finally {
+      clearTimeout(timer)
+    }
+  } finally {
+    stopKeepAlive()
+  }
+}
+
 async function handleSaveDetails(fields: UserDetailField[]): Promise<SaveAnswerResult> {
   try {
     const auth = await getAuthHeaders()
@@ -459,6 +516,11 @@ chrome.runtime.onMessage.addListener(
 
     if (message.type === "SAVE_DETAILS") {
       handleSaveDetails(message.fields).then(sendResponse)
+      return true
+    }
+
+    if (message.type === "SAVE_JOB") {
+      handleSaveJob(message.pageHtml, message.meta).then(sendResponse)
       return true
     }
 
