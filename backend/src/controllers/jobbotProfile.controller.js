@@ -1,3 +1,6 @@
+import { readFileSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import {
   deleteCanonicalDetail,
   getUserDetails,
@@ -5,6 +8,12 @@ import {
   saveCanonicalDetails,
   saveNewDetails,
 } from "../repositories/userProfile.repository.js";
+import { extractProfileFromResume } from "../services/profileFromResume.service.js";
+
+const USER_DETAILS_SCHEMA_PATH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../jsonData/userDetails.json"
+);
 
 // Ported from job-bot/backend/src/routes/userRoutes.js as part of merging
 // the job-bot extension's backend into this one. Every handler reads/writes
@@ -58,6 +67,21 @@ export async function saveAnswer(req, res) {
   }
 }
 
+// GET /api/user/profile-fields
+// Field schema the Job profile screen uses to render first-time inputs.
+export function getProfileFields(req, res) {
+  try {
+    const schema = JSON.parse(readFileSync(USER_DETAILS_SCHEMA_PATH, "utf8"));
+    res.json({
+      details: Array.isArray(schema?.details) ? schema.details : [],
+      extraDetails: Array.isArray(schema?.extraDetails) ? schema.extraDetails : [],
+    });
+  } catch (err) {
+    console.error("jobbot user/profile-fields GET failed:", err);
+    res.status(500).json({ error: "Failed to load profile fields" });
+  }
+}
+
 // GET /api/user/profile
 // Powers the "Job profile" tab in the voice-bot frontend - returns the
 // candidate's saved profile facts (each with one or more possible answers)
@@ -92,6 +116,30 @@ export async function updateProfile(req, res) {
     console.error("jobbot user/profile PUT failed:", err);
     const message = err instanceof Error ? err.message : "Failed to update profile";
     res.status(400).json({ error: message });
+  }
+}
+
+// POST /api/user/profile-from-resume
+// body: { resumeText }
+// Reads the resume with the chat model and returns form values for the
+// profile questions. The caller reviews them before saving.
+export async function prefillProfileFromResume(req, res) {
+  const resumeText = typeof req.body?.resumeText === "string" ? req.body.resumeText.trim() : "";
+  if (!resumeText) {
+    return res.status(400).json({ error: { message: "Upload a resume before filling the form." } });
+  }
+  if (resumeText.length > 20000) {
+    return res.status(400).json({ error: { message: "That resume is too long to read. Try a shorter PDF." } });
+  }
+
+  try {
+    const result = await extractProfileFromResume(resumeText);
+    res.json({ ok: true, values: result.values, filledCount: result.filledCount });
+  } catch (err) {
+    console.error("jobbot user/profile-from-resume failed:", err);
+    const message = err instanceof Error ? err.message : "Failed to read the resume";
+    const status = /not configured|not set/i.test(message) ? 503 : 502;
+    res.status(status).json({ error: { message } });
   }
 }
 

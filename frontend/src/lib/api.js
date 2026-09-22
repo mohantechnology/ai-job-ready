@@ -59,7 +59,9 @@ async function request(path, options = {}) {
   const body = isJson ? await response.json() : null;
 
   if (!response.ok) {
-    const message = body?.error?.message || `Request failed with status ${response.status}`;
+    const message =
+      (typeof body?.error === "string" ? body.error : body?.error?.message) ||
+      `Request failed with status ${response.status}`;
     throw new Error(message);
   }
 
@@ -120,6 +122,10 @@ export function getUserProfile() {
   return request("/user/profile");
 }
 
+export function getUserProfileFields() {
+  return request("/user/profile-fields");
+}
+
 export function updateUserProfile(fields) {
   return request("/user/profile", {
     method: "PUT",
@@ -130,6 +136,13 @@ export function updateUserProfile(fields) {
 export function deleteUserProfileField(key) {
   return request(`/user/profile/${encodeURIComponent(key)}`, {
     method: "DELETE",
+  });
+}
+
+export function prefillProfileFromResume(resumeText) {
+  return request("/user/profile-from-resume", {
+    method: "POST",
+    body: JSON.stringify({ resumeText }),
   });
 }
 

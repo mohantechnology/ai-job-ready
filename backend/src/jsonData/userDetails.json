@@ -1,0 +1,389 @@
+{
+  "details": [
+    {
+      "key": "firstName",
+      "label": "First name",
+      "type": "text",
+      "required": true,
+      "group": "identity",
+      "placeholder": "Your first name"
+    },
+    {
+      "key": "middleName",
+      "label": "Middle name",
+      "type": "text",
+      "required": false,
+      "group": "identity",
+      "placeholder": "Optional"
+    },
+    {
+      "key": "lastName",
+      "label": "Last name",
+      "type": "text",
+      "required": true,
+      "group": "identity",
+      "placeholder": "Your last name"
+    },
+    {
+      "key": "age",
+      "label": "Age",
+      "type": "number",
+      "required": false,
+      "group": "identity",
+      "placeholder": "e.g. 24"
+    },
+    {
+      "key": "genderIdentity",
+      "label": "Gender",
+      "type": "select",
+      "required": false,
+      "group": "identity",
+      "options": [
+        { "label": "Male", "value": "male" },
+        { "label": "Female", "value": "female" },
+        { "label": "Non-binary", "value": "non_binary" },
+        { "label": "Prefer not to say", "value": "prefer_not_to_say" }
+      ]
+    },
+    {
+      "key": "email",
+      "label": "Email",
+      "type": "email",
+      "required": true,
+      "group": "contact",
+      "placeholder": "you@example.com"
+    },
+    {
+      "key": "phone",
+      "label": "Phone",
+      "type": "tel",
+      "required": false,
+      "group": "contact",
+      "placeholder": "+91 98765 43210"
+    },
+    {
+      "key": "location",
+      "label": "Location",
+      "type": "text",
+      "required": false,
+      "group": "contact",
+      "placeholder": "City, State, Country"
+    },
+    {
+      "key": "linkedinUrl",
+      "label": "LinkedIn URL",
+      "type": "url",
+      "required": false,
+      "group": "contact",
+      "placeholder": "https://linkedin.com/in/you"
+    },
+    {
+      "key": "githubProfile",
+      "label": "GitHub profile",
+      "type": "url",
+      "required": false,
+      "group": "contact",
+      "placeholder": "https://github.com/you"
+    },
+    {
+      "key": "portfolio",
+      "label": "Portfolio",
+      "type": "url",
+      "required": false,
+      "group": "contact",
+      "placeholder": "https://your-site.com"
+    },
+    {
+      "key": "extraContacts",
+      "label": "More contact details",
+      "type": "extraFields",
+      "required": false,
+      "group": "contact",
+      "addLabel": "Add extra contact"
+    },
+    {
+      "key": "education",
+      "label": "Education",
+      "type": "repeat",
+      "required": false,
+      "group": "education",
+      "itemLabel": "Education",
+      "addLabel": "Add education",
+      "fields": [
+        {
+          "key": "school",
+          "label": "School (college / university)",
+          "type": "text",
+          "placeholder": "College or university name"
+        },
+        {
+          "key": "degree",
+          "label": "Degree",
+          "type": "text",
+          "placeholder": "e.g. B.Tech, M.Sc"
+        },
+        {
+          "key": "fieldOfStudy",
+          "label": "Field of study",
+          "type": "text",
+          "placeholder": "e.g. Computer Science"
+        },
+        {
+          "key": "startDate",
+          "label": "Start date",
+          "type": "month"
+        },
+        {
+          "key": "endDate",
+          "label": "End date",
+          "type": "month"
+        },
+        {
+          "key": "grade",
+          "label": "Grade",
+          "type": "text",
+          "placeholder": "e.g. 8.2 CGPA"
+        },
+        {
+          "key": "description",
+          "label": "Description",
+          "type": "textarea",
+          "placeholder": "What you studied, projects, or achievements"
+        }
+      ]
+    },
+    {
+      "key": "workExperience",
+      "label": "Work experience",
+      "type": "repeat",
+      "required": false,
+      "group": "workExperience",
+      "itemLabel": "Role",
+      "addLabel": "Add work experience",
+      "fields": [
+        {
+          "key": "jobTitle",
+          "label": "Job title",
+          "type": "text",
+          "placeholder": "e.g. Full Stack Developer"
+        },
+        {
+          "key": "organization",
+          "label": "Organization",
+          "type": "text",
+          "placeholder": "Company name"
+        },
+        {
+          "key": "location",
+          "label": "Location",
+          "type": "text",
+          "placeholder": "City, Country"
+        },
+        {
+          "key": "locationType",
+          "label": "Location type",
+          "type": "select",
+          "options": [
+            { "label": "Onsite", "value": "onsite" },
+            { "label": "Remote", "value": "remote" },
+            { "label": "Hybrid", "value": "hybrid" }
+          ]
+        },
+        {
+          "key": "startDate",
+          "label": "Start date",
+          "type": "month"
+        },
+        {
+          "key": "currentlyWorking",
+          "label": "I currently work here",
+          "type": "checkbox"
+        },
+        {
+          "key": "endDate",
+          "label": "End date",
+          "type": "month",
+          "hideWhen": { "field": "currentlyWorking", "equals": true }
+        },
+        {
+          "key": "description",
+          "label": "Description",
+          "type": "textarea",
+          "placeholder": "What you delivered in this role"
+        },
+        {
+          "key": "skills",
+          "label": "Skills",
+          "type": "tags",
+          "placeholder": "Type a skill and press Enter"
+        }
+      ]
+    },
+    {
+      "key": "selfProjects",
+      "label": "Self projects",
+      "type": "repeat",
+      "required": false,
+      "group": "selfProjects",
+      "itemLabel": "Project",
+      "addLabel": "Add project",
+      "fields": [
+        {
+          "key": "title",
+          "label": "Title",
+          "type": "text",
+          "placeholder": "Project name"
+        },
+        {
+          "key": "subtitle",
+          "label": "Subtitle",
+          "type": "text",
+          "placeholder": "Short summary"
+        },
+        {
+          "key": "description",
+          "label": "What it does / delivered",
+          "type": "textarea",
+          "placeholder": "What you built and what it delivered"
+        },
+        {
+          "key": "sourceCode",
+          "label": "Source code",
+          "type": "url",
+          "placeholder": "https://github.com/you/project"
+        },
+        {
+          "key": "liveLink",
+          "label": "Live link",
+          "type": "url",
+          "placeholder": "https://project.example.com"
+        }
+      ]
+    }
+  ],
+  "extraDetails": [
+    {
+      "key": "summary",
+      "label": "Profile summary",
+      "type": "textarea",
+      "required": false,
+      "group": "extraDetails",
+      "placeholder": "A short professional summary you can reuse on applications."
+    },
+    {
+      "key": "coverLetterTemplate",
+      "label": "Cover letter",
+      "type": "textarea",
+      "required": false,
+      "group": "extraDetails",
+      "placeholder": "A reusable cover-letter template. You can tailor it per job later."
+    },
+    {
+      "key": "race",
+      "label": "Race",
+      "type": "text",
+      "required": false,
+      "group": "extraDetails",
+      "placeholder": "Optional — used only if a form asks"
+    },
+    {
+      "key": "ethnicity",
+      "label": "Ethnicity",
+      "type": "text",
+      "required": false,
+      "group": "extraDetails",
+      "placeholder": "Optional — used only if a form asks"
+    },
+    {
+      "key": "disability",
+      "label": "Disability",
+      "type": "select",
+      "required": false,
+      "group": "extraDetails",
+      "options": [
+        { "label": "No", "value": "no" },
+        { "label": "Yes", "value": "yes" },
+        { "label": "Prefer not to say", "value": "prefer_not_to_say" }
+      ]
+    },
+    {
+      "key": "veteranStatus",
+      "label": "Veteran status",
+      "type": "select",
+      "required": false,
+      "group": "extraDetails",
+      "options": [
+        { "label": "No", "value": "no" },
+        { "label": "Yes", "value": "yes" },
+        { "label": "Prefer not to say", "value": "prefer_not_to_say" }
+      ]
+    },
+    {
+      "key": "totalExperience",
+      "label": "Total years of experience",
+      "type": "duration",
+      "required": false,
+      "group": "extraDetails"
+    },
+    {
+      "key": "desiredPosition",
+      "label": "Desired position",
+      "type": "text",
+      "required": false,
+      "group": "extraDetails",
+      "placeholder": "e.g. Software Engineer"
+    },
+    {
+      "key": "availableStartDate",
+      "label": "Available start date",
+      "type": "text",
+      "required": false,
+      "group": "extraDetails",
+      "placeholder": "Immediate, or a date"
+    },
+    {
+      "key": "expectedSalary",
+      "label": "Expected salary",
+      "type": "text",
+      "required": false,
+      "group": "extraDetails",
+      "placeholder": "e.g. 18 LPA or Negotiable"
+    },
+    {
+      "key": "requiresSponsorship",
+      "label": "Requires sponsorship",
+      "type": "select",
+      "required": false,
+      "group": "extraDetails",
+      "options": [
+        { "label": "No", "value": "no" },
+        { "label": "Yes", "value": "yes" }
+      ]
+    },
+    {
+      "key": "sponsorshipVisaCountry",
+      "label": "Visa / country for sponsorship",
+      "type": "text",
+      "required": false,
+      "group": "extraDetails",
+      "placeholder": "e.g. H-1B, United States",
+      "hideWhen": { "field": "requiresSponsorship", "notEquals": "yes" }
+    },
+    {
+      "key": "workAuthorization",
+      "label": "Work authorization",
+      "type": "text",
+      "required": false,
+      "group": "extraDetails",
+      "placeholder": "e.g. Authorized to work in India"
+    },
+    {
+      "key": "otherDetails",
+      "label": "Any other details",
+      "type": "textarea",
+      "required": false,
+      "group": "extraDetails",
+      "placeholder": "Anything else you want saved for applications"
+    }
+  ]
+}

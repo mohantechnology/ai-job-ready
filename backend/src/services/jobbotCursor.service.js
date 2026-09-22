@@ -108,6 +108,34 @@ function cursorAgentOptions(apiKey, modelId, store) {
   };
 }
 
+// One-shot text prompt with tools disabled. Used by resume prefill.
+export async function runCursorTextPrompt(prompt) {
+  const apiKey = (process.env.CURSOR_API_KEY || "").trim();
+  if (!apiKey) {
+    throw new Error("CURSOR_API_KEY is not set");
+  }
+
+  const modelId = process.env.CURSOR_MODEL || "composer-2.5";
+  const { Agent, store } = await getCursorSdk();
+  const agent = await Agent.create(cursorAgentOptions(apiKey, modelId, store));
+
+  try {
+    let streamed = "";
+    const run = await agent.send(prompt, {
+      onDelta: ({ update }) => {
+        if (update?.type === "text-delta" && typeof update.text === "string") {
+          streamed += update.text;
+        }
+      },
+    });
+    const result = await withTimeout(run.wait(), FILL_LLM_TIMEOUT_MS, "Cursor prompt");
+    assertCursorResult(result);
+    return result?.result || streamed || "";
+  } finally {
+    await agent[Symbol.asyncDispose]();
+  }
+}
+
 /**
  * Same fill contract as OpenAI (`prompts/jobbotFillForm.js`), sent through
  * the Cursor SDK as a streamed prompt. Tools are disabled so the model only

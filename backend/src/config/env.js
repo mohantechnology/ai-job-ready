@@ -37,4 +37,6 @@ export const env = {
   // services/jobbotCursor.service.js for the extension's fill/cursor stream.
   cursorApiKey: process.env.CURSOR_API_KEY || "",
   cursorModel: process.env.CURSOR_MODEL || "composer-2.5",
+  // Resume prefill provider. "cursor" (default) or "openai".
+  profilePrefillProvider: process.env.PROFILE_PREFILL_PROVIDER || "cursor",
 };

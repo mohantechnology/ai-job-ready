@@ -88,7 +88,10 @@ function normalizeAnswerItems(rawAnswer) {
           : item.value != null
             ? asTrimmedString(String(item.value), MAX_VALUE_LENGTH)
             : "";
-      return value ? { value } : null;
+      if (!value) return null;
+      const data =
+        item.data && typeof item.data === "object" && !Array.isArray(item.data) ? item.data : null;
+      return data ? { value, data } : { value };
     })
     .filter(Boolean);
 }
@@ -107,7 +110,8 @@ export function normalizeDetailField(raw) {
   const key = asTrimmedString(raw.key, MAX_KEY_LENGTH) || keyFromLabel(label);
   if (!key) return null;
 
-  return { label, key, answer };
+  const group = asTrimmedString(raw.group, 80);
+  return group ? { label, key, answer, group } : { label, key, answer };
 }
 
 function findExistingIndex(list, field) {
@@ -205,7 +209,10 @@ export async function saveCanonicalDetails(userId, fields) {
   for (const field of incoming) {
     const index = findExistingIndex(details, field);
     if (index >= 0) {
-      details[index] = field;
+      details[index] = {
+        ...field,
+        group: field.group || details[index].group,
+      };
     } else {
       details.push(field);
     }

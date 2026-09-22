@@ -4,8 +4,10 @@ import {
   saveDetails,
   saveAnswer,
   getProfile,
+  getProfileFields,
   updateProfile,
   deleteProfileField,
+  prefillProfileFromResume,
 } from "../controllers/jobbotProfile.controller.js";
 
 // Ported from job-bot/backend/src/routes/userRoutes.js. Mounted at
@@ -19,7 +21,9 @@ router.use(requireAuth);
 router.post("/save-details", saveDetails);
 router.post("/save-answer", saveAnswer);
 
+router.get("/profile-fields", getProfileFields);
 router.get("/profile", getProfile);
+router.post("/profile-from-resume", prefillProfileFromResume);
 router.put("/profile", updateProfile);
 router.delete("/profile/:key", deleteProfileField);
 
