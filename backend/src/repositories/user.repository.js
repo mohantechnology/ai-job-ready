@@ -19,3 +19,31 @@ export async function findUserById(id) {
   const result = await query(`SELECT id, name, email, created_at FROM users WHERE id = $1`, [id]);
   return result.rows[0] || null;
 }
+
+export async function findUserWithPasswordById(id) {
+  const result = await query(`SELECT id, name, email, password_hash, created_at FROM users WHERE id = $1`, [id]);
+  return result.rows[0] || null;
+}
+
+export async function updateUserAccount(id, { name, passwordHash }) {
+  const sets = [];
+  const params = [];
+
+  if (name != null) {
+    params.push(name);
+    sets.push(`name = $${params.length}`);
+  }
+  if (passwordHash != null) {
+    params.push(passwordHash);
+    sets.push(`password_hash = $${params.length}`);
+  }
+
+  sets.push("updated_at = now()");
+  params.push(id);
+
+  const result = await query(
+    `UPDATE users SET ${sets.join(", ")} WHERE id = $${params.length} RETURNING id, name, email, created_at`,
+    params
+  );
+  return result.rows[0] || null;
+}

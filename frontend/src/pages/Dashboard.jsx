@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { listInterviews } from "../lib/api.js";
-import { useAuth } from "../context/AuthContext.jsx";
 import InterviewCard from "../components/InterviewCard.jsx";
+import PageFrame from "../components/layout/PageFrame.jsx";
 
 export default function Dashboard() {
-  const navigate = useNavigate();
-  const { user } = useAuth();
   const [interviews, setInterviews] = useState(null);
   const [error, setError] = useState("");
 
@@ -16,33 +14,20 @@ export default function Dashboard() {
       .catch((err) => setError(err.message || "Could not load your interviews."));
   }, []);
 
-  function handleCardClick(interview) {
-    if (interview.status === "completed") {
-      navigate(`/results/${interview.id}`);
-    } else {
-      navigate(`/mic-check/${interview.id}`);
-    }
-  }
-
   return (
-    <div className="flex min-h-full flex-col items-center px-4 py-10 sm:px-8">
-      <div className="w-full max-w-3xl">
+    <PageFrame>
+      <div className="w-full">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-2xl font-semibold text-white">Your interviews</h1>
-            <p className="mt-1 text-sm text-slate-400">
-              {user ? `Signed in as ${user.name}. ` : ""}Pick up an interview you set up, or start a new one.
-            </p>
+            <p className="mt-1 text-sm text-slate-400">Pick up an interview you set up, or start a new one.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => navigate("/")}
-              className="rounded-lg bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-400"
-            >
-              + New interview
-            </button>
-          </div>
+          <Link
+            to="/interviews/create"
+            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-400"
+          >
+            + New interview
+          </Link>
         </div>
 
         {error && (
@@ -64,17 +49,13 @@ export default function Dashboard() {
         )}
 
         {interviews && interviews.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid items-stretch gap-4 sm:grid-cols-2">
             {interviews.map((interview) => (
-              <InterviewCard
-                key={interview.id}
-                interview={interview}
-                onClick={() => handleCardClick(interview)}
-              />
+              <InterviewCard key={interview.id} interview={interview} />
             ))}
           </div>
         )}
       </div>
-    </div>
+    </PageFrame>
   );
 }

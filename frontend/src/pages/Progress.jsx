@@ -1,15 +1,10 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Briefcase, ClipboardList, Percent, Sparkles } from "lucide-react";
 import { getDashboard } from "../lib/api.js";
-
-const RANGES = [
-  { id: "this_week", label: "This week" },
-  { id: "last_week", label: "Last week" },
-  { id: "this_month", label: "This month" },
-  { id: "last_month", label: "Last month" },
-  { id: "all", label: "All time" },
-];
+import { formatUtcDay, rangeCaption, rangeSearchParams } from "../lib/dateRange.js";
+import PageFrame from "../components/layout/PageFrame.jsx";
+import RangeFilter from "../components/dashboard/RangeFilter.jsx";
 
 const JOB_STATUSES = [
   { key: "applied", label: "Applied", text: "text-sky-300", color: "#38bdf8" },
@@ -41,7 +36,10 @@ const TONE = {
   muted: { text: "text-slate-400", bar: "from-slate-500 to-slate-400", ring: "#64748b" },
 };
 
-function formatRangeLabel(start, end, range) {
+function formatRangeLabel(start, end, range, selection) {
+  if (range === "custom" && selection?.from && selection?.to) {
+    return `${formatUtcDay(selection.from)} – ${formatUtcDay(selection.to)}`;
+  }
   if (range === "all" || (!start && !end)) return "All time";
   const opts = { month: "short", day: "numeric" };
   const a = start ? new Date(start).toLocaleDateString(undefined, opts) : "…";
@@ -81,8 +79,7 @@ function donutArcs(byStatus, total) {
 }
 
 export default function Progress() {
-  const navigate = useNavigate();
-  const [range, setRange] = useState("this_week");
+  const [selection, setSelection] = useState({ range: "this_week", from: "", to: "" });
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -91,7 +88,7 @@ export default function Progress() {
     let cancelled = false;
     setLoading(true);
     setError("");
-    getDashboard(range)
+    getDashboard(selection)
       .then((payload) => {
         if (!cancelled) setData(payload);
       })
@@ -104,7 +101,7 @@ export default function Progress() {
     return () => {
       cancelled = true;
     };
-  }, [range]);
+  }, [selection]);
 
   const summary = data?.summary;
   const jobs = data?.jobs;
@@ -112,43 +109,16 @@ export default function Progress() {
   const avg = summary?.avgOverallScore;
 
   return (
-    <div className="min-h-full bg-slate-950">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-8">
+    <div className="min-h-full">
+      <PageFrame className="flex flex-col gap-5">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold text-white">Overview</h1>
-            {data && <p className="text-xs text-slate-500">{formatRangeLabel(data.rangeStart, data.rangeEnd, data.range)}</p>}
+            {data && (
+              <p className="text-xs text-slate-500">{formatRangeLabel(data.rangeStart, data.rangeEnd, data.range, selection)}</p>
+            )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex flex-wrap rounded-xl border border-white/10 bg-white/[0.03] p-1">
-              {RANGES.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setRange(item.id)}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
-                    range === item.id ? "bg-white text-slate-900" : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate("/applied-jobs")}
-              className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/[0.06]"
-            >
-              Applied jobs
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/")}
-              className="rounded-xl bg-teal-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-teal-300"
-            >
-              Practice
-            </button>
-          </div>
+          <RangeFilter value={selection} onChange={setSelection} />
         </header>
 
         {error && (
@@ -158,14 +128,14 @@ export default function Progress() {
         {loading && <LoadingSkeleton />}
 
         {!loading && data && jobs && summary && (
-          <div key={range} className="space-y-5">
+          <div key={`${selection.range}:${selection.from}:${selection.to}`} className="space-y-5">
             <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <Kpi icon={Briefcase} label="Applications" value={jobs.total} hint="Saved jobs" />
               <Kpi
                 icon={ClipboardList}
                 label="Saved this period"
                 value={jobs.jobsSaved}
-                hint={RANGES.find((item) => item.id === range)?.label || ""}
+                hint={rangeCaption(selection)}
               />
               <Kpi
                 icon={Percent}
@@ -183,20 +153,14 @@ export default function Progress() {
               />
             </section>
 
-            {attention && (
-              <AttentionChips attention={attention} onOpenJobs={() => navigate("/applied-jobs")} onOpenInterviews={() => navigate("/dashboard")} />
-            )}
+            {attention && <AttentionChips attention={attention} />}
 
             <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-white">Application stages</h2>
-                <button
-                  type="button"
-                  onClick={() => navigate("/applied-jobs")}
-                  className="text-xs font-medium text-teal-300 hover:text-teal-200"
-                >
+                <Link to="/applied-jobs" className="text-xs font-medium text-teal-300 hover:text-teal-200">
                   View jobs
-                </button>
+                </Link>
               </div>
               <div className="flex flex-col items-center gap-6 lg:flex-row lg:items-center">
                 <StatusDonut byStatus={jobs.byStatus} total={jobs.total} />
@@ -229,13 +193,12 @@ export default function Progress() {
             <section className="rounded-[1.75rem] border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.02] px-5 py-7 sm:px-8">
               <div className="mb-6 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-white">Interview practice</h2>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/interview-progress?range=${range}`)}
+                <Link
+                  to={`/dashboard/interview-progress?${rangeSearchParams(selection)}`}
                   className="text-xs font-medium text-teal-300 hover:text-teal-200"
                 >
                   View progress
-                </button>
+                </Link>
               </div>
               <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-center lg:justify-between lg:gap-12">
                 <ScoreDial score={avg} interviews={summary.interviewsCompleted} />
@@ -252,13 +215,9 @@ export default function Progress() {
               <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] lg:col-span-3">
                 <div className="flex items-center justify-between px-4 py-3 sm:px-5">
                   <h2 className="text-sm font-semibold text-white">Recent applications</h2>
-                  <button
-                    type="button"
-                    onClick={() => navigate("/applied-jobs")}
-                    className="text-xs font-medium text-teal-300 hover:text-teal-200"
-                  >
+                  <Link to="/applied-jobs" className="text-xs font-medium text-teal-300 hover:text-teal-200">
                     View all
-                  </button>
+                  </Link>
                 </div>
                 {data.recent.applications.length === 0 ? (
                   <p className="px-5 pb-6 text-sm text-slate-500">No applications yet.</p>
@@ -279,13 +238,12 @@ export default function Progress() {
                           return (
                             <tr key={job.id} className="border-t border-white/5">
                               <td className="px-4 py-2.5 sm:px-5">
-                                <button
-                                  type="button"
-                                  onClick={() => navigate("/applied-jobs")}
-                                  className="max-w-[12rem] truncate text-left text-slate-100 hover:text-white"
+                                <Link
+                                  to="/applied-jobs"
+                                  className="inline-block max-w-[12rem] truncate text-left text-slate-100 hover:text-white"
                                 >
                                   {label.name}
-                                </button>
+                                </Link>
                               </td>
                               <td className="max-w-[14rem] truncate px-3 py-2.5 text-slate-400">{label.title}</td>
                               <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">{formatDate(job.createdAt)}</td>
@@ -308,13 +266,9 @@ export default function Progress() {
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5 lg:col-span-2">
                 <div className="mb-3 flex items-center justify-between">
                   <h2 className="text-sm font-semibold text-white">Recent interviews</h2>
-                  <button
-                    type="button"
-                    onClick={() => navigate("/dashboard")}
-                    className="text-xs font-medium text-teal-300 hover:text-teal-200"
-                  >
+                  <Link to="/interviews" className="text-xs font-medium text-teal-300 hover:text-teal-200">
                     View all
-                  </button>
+                  </Link>
                 </div>
                 {data.recent.interviews.length === 0 ? (
                   <p className="py-6 text-sm text-slate-500">No completed interviews yet.</p>
@@ -322,9 +276,8 @@ export default function Progress() {
                   <ul className="space-y-1">
                     {data.recent.interviews.map((interview) => (
                       <li key={interview.id}>
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/results/${interview.id}`)}
+                        <Link
+                          to={`/interviews/results/${interview.id}`}
                           className="flex w-full items-center justify-between gap-3 rounded-lg px-1 py-2 text-left hover:bg-white/[0.04]"
                         >
                           <span className="min-w-0">
@@ -336,7 +289,7 @@ export default function Progress() {
                           <span className="shrink-0 text-sm font-semibold tabular-nums text-teal-200">
                             {interview.overallScore != null ? interview.overallScore : "—"}
                           </span>
-                        </button>
+                        </Link>
                       </li>
                     ))}
                   </ul>
@@ -346,7 +299,7 @@ export default function Progress() {
 
           </div>
         )}
-      </div>
+      </PageFrame>
     </div>
   );
 }
@@ -407,22 +360,22 @@ function ScoreDial({ score, interviews }) {
   );
 }
 
-function AttentionChips({ attention, onOpenJobs, onOpenInterviews }) {
+function AttentionChips({ attention }) {
   const chips = [
     attention.unfinishedInterviews.count > 0 && {
       key: "continue",
       label: `${attention.unfinishedInterviews.count} to continue`,
-      onClick: onOpenInterviews,
+      to: "/interviews",
     },
     attention.jobsWithoutPractice.count > 0 && {
       key: "practice",
       label: `${attention.jobsWithoutPractice.count} need practice`,
-      onClick: onOpenJobs,
+      to: "/applied-jobs",
     },
     attention.staleApplied.count > 0 && {
       key: "follow",
       label: `${attention.staleApplied.count} to follow up`,
-      onClick: onOpenJobs,
+      to: "/applied-jobs",
     },
   ].filter(Boolean);
 
@@ -431,14 +384,13 @@ function AttentionChips({ attention, onOpenJobs, onOpenInterviews }) {
   return (
     <div className="flex flex-wrap gap-2">
       {chips.map((chip) => (
-        <button
+        <Link
           key={chip.key}
-          type="button"
-          onClick={chip.onClick}
-          className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
+          to={chip.to}
+          className="inline-block rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
         >
           {chip.label}
-        </button>
+        </Link>
       ))}
     </div>
   );

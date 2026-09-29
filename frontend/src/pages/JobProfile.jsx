@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, UserRound } from "lucide-react";
+import PageFrame from "../components/layout/PageFrame.jsx";
 import { deleteUserProfileField, getUserProfile, getUserProfileFields, updateUserProfile } from "../lib/api.js";
 import CompleteProfileModal from "../components/jobProfile/CompleteProfileModal.jsx";
 import ProfileSetupForm from "../components/jobProfile/ProfileSetupForm.jsx";
@@ -267,7 +268,7 @@ export default function JobProfile() {
   const editingRepeatField = editingEntry ? (details || []).find((item) => item.key === editingEntry.key) : null;
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-8">
+    <PageFrame>
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-white">Job profile</h1>
@@ -528,6 +529,6 @@ export default function JobProfile() {
           }}
         />
       )}
-    </div>
+    </PageFrame>
   );
 }

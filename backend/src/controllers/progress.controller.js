@@ -1,5 +1,5 @@
 import { ApiError } from "../middleware/errorHandler.js";
-import { resolveProgressRange, isValidProgressRange, listProgressRanges } from "../utils/progressRanges.js";
+import { resolveProgressRange, listProgressRanges } from "../utils/progressRanges.js";
 import {
   getProgressSummary,
   getScoreTrend,
@@ -8,13 +8,18 @@ import {
 } from "../repositories/progress.repository.js";
 
 export async function getProgressHandler(req, res) {
-  const range = typeof req.query.range === "string" ? req.query.range : "this_week";
-
-  if (!isValidProgressRange(range)) {
-    throw new ApiError(400, `range must be one of: ${listProgressRanges().join(", ")}`);
+  let range;
+  let start;
+  let end;
+  try {
+    const requested = typeof req.query.range === "string" && req.query.range ? req.query.range : "this_week";
+    ({ range, start, end } = resolveProgressRange(requested, new Date(), {
+      from: req.query.from,
+      to: req.query.to,
+    }));
+  } catch (err) {
+    throw new ApiError(400, err.message || `range must be one of: ${listProgressRanges().join(", ")}`);
   }
-
-  const { start, end } = resolveProgressRange(range);
 
   const [summary, scoreTrend, topics, concepts] = await Promise.all([
     getProgressSummary(req.userId, start, end),

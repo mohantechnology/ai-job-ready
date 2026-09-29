@@ -15,7 +15,7 @@ export default function MicCheck() {
     getInterview(id)
       .then(({ interview: data }) => {
         if (data.status === "completed") {
-          navigate(`/results/${id}`, { replace: true });
+          navigate(`/interviews/results/${id}`, { replace: true });
           return;
         }
         setInterview(data);
@@ -27,7 +27,7 @@ export default function MicCheck() {
     stopMeter();
     // Replace so the back button skips the mic-check step and lands on the
     // dashboard instead of re-entering the flow for this interview.
-    navigate(`/interview/${id}`, { replace: true });
+    navigate(`/interviews/${id}`, { replace: true });
   }
 
   const barCount = 20;

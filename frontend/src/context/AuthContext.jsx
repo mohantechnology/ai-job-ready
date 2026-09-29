@@ -6,6 +6,7 @@ import {
   logout as apiLogout,
   persistAuth,
   register as apiRegister,
+  updateAccount as apiUpdateAccount,
 } from "../lib/api.js";
 
 const AuthContext = createContext(null);
@@ -55,9 +56,16 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  const updateAccount = useCallback(async (payload) => {
+    const { user: data } = await apiUpdateAccount(payload);
+    persistAuth(getToken(), data);
+    setUser(data);
+    return data;
+  }, []);
+
   const value = useMemo(
-    () => ({ user, isLoading, isAuthenticated: Boolean(user), login, register, logout }),
-    [user, isLoading, login, register, logout]
+    () => ({ user, isLoading, isAuthenticated: Boolean(user), login, register, logout, updateAccount }),
+    [user, isLoading, login, register, logout, updateAccount]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

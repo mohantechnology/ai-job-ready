@@ -1,12 +1,23 @@
 import bcrypt from "bcryptjs";
 import { ApiError } from "../middleware/errorHandler.js";
-import { createUser, findUserByEmail, findUserById } from "../repositories/user.repository.js";
+import {
+  createUser,
+  findUserByEmail,
+  findUserById,
+  findUserWithPasswordById,
+  updateUserAccount,
+} from "../repositories/user.repository.js";
 import { signToken } from "../utils/jwt.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function publicUser(user) {
-  return { id: user.id, name: user.name, email: user.email };
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    createdAt: user.created_at || null,
+  };
 }
 
 export async function registerHandler(req, res) {
@@ -71,4 +82,53 @@ export async function meHandler(req, res) {
     throw new ApiError(404, "User not found");
   }
   res.json({ user: publicUser(user) });
+}
+
+export async function updateAccountHandler(req, res) {
+  const { name, email, currentPassword, newPassword } = req.body || {};
+
+  if (email != null) {
+    throw new ApiError(400, "Email cannot be changed");
+  }
+
+  const user = await findUserWithPasswordById(req.userId);
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const next = {};
+
+  if (name != null) {
+    if (typeof name !== "string" || !name.trim()) {
+      throw new ApiError(400, "Name is required");
+    }
+    if (name.trim().length > 80) {
+      throw new ApiError(400, "Name must be 80 characters or fewer");
+    }
+    next.name = name.trim();
+  }
+
+  if (typeof newPassword === "string" && newPassword.length > 0) {
+    if (newPassword.length < 6) {
+      throw new ApiError(400, "Password must be at least 6 characters");
+    }
+    if (!currentPassword) {
+      throw new ApiError(400, "Current password is required");
+    }
+    const matches = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!matches) {
+      throw new ApiError(400, "Current password is incorrect");
+    }
+    next.passwordHash = await bcrypt.hash(newPassword, 10);
+  } else if (currentPassword) {
+    throw new ApiError(400, "Enter a new password to update it");
+  }
+
+  if (next.name == null && next.passwordHash == null) {
+    res.json({ user: publicUser(user) });
+    return;
+  }
+
+  const updated = await updateUserAccount(user.id, next);
+  res.json({ user: publicUser(updated) });
 }

@@ -1,5 +1,5 @@
 import { ApiError } from "../middleware/errorHandler.js";
-import { resolveProgressRange, isValidProgressRange, listProgressRanges } from "../utils/progressRanges.js";
+import { resolveProgressRange, listProgressRanges } from "../utils/progressRanges.js";
 import {
   getProgressSummary,
   getScoreTrend,
@@ -22,14 +22,17 @@ function percent(part, total) {
   return Math.round((part / total) * 100);
 }
 
-export async function getDashboardHandler(req, res) {
-  const range = typeof req.query.range === "string" ? req.query.range : "this_week";
-
-  if (!isValidProgressRange(range)) {
-    throw new ApiError(400, `range must be one of: ${listProgressRanges().join(", ")}`);
+function resolveRange(query) {
+  try {
+    const range = typeof query.range === "string" && query.range ? query.range : "this_week";
+    return resolveProgressRange(range, new Date(), { from: query.from, to: query.to });
+  } catch (err) {
+    throw new ApiError(400, err.message || `range must be one of: ${listProgressRanges().join(", ")}`);
   }
+}
 
-  const { start, end } = resolveProgressRange(range);
+export async function getDashboardHandler(req, res) {
+  const { range, start, end } = resolveRange(req.query);
   const userId = req.userId;
 
   const [

@@ -12,6 +12,7 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
+import PageFrame from "../components/layout/PageFrame.jsx";
 import AdditionalDetailsModal from "../components/AdditionalDetailsModal.jsx";
 import Modal from "../components/Modal.jsx";
 import PracticeInterviewModal from "../components/PracticeInterviewModal.jsx";
@@ -75,14 +76,6 @@ function companyInitials(name) {
     .slice(0, 2)
     .join("")
     .toUpperCase();
-}
-
-function chunk(items, size) {
-  const rows = [];
-  for (let index = 0; index < items.length; index += size) {
-    rows.push(items.slice(index, index + size));
-  }
-  return rows;
 }
 
 function jobNarrative(job) {
@@ -204,7 +197,7 @@ export default function AppliedJobs() {
           additionalInfo = result.additionalInfo || additionalInfo;
         }
         setPracticeJob(null);
-        navigate("/", {
+        navigate("/interviews/create", {
           state: {
             prefillJobTitle: job.role,
             prefillCompany: job.company,
@@ -247,10 +240,10 @@ export default function AppliedJobs() {
 
   function openInterview(interview) {
     if (interview.status === "completed") {
-      navigate(`/results/${interview.id}`);
+      navigate(`/interviews/results/${interview.id}`);
       return;
     }
-    navigate(`/mic-check/${interview.id}`);
+    navigate(`/interviews/mic-check/${interview.id}`);
   }
 
   function renderJob(job, index) {
@@ -258,7 +251,6 @@ export default function AppliedJobs() {
       <JobCard
         key={job.id}
         job={job}
-        layout={layout}
         avatarTheme={AVATAR_THEMES[index % AVATAR_THEMES.length]}
         open={openJobId === job.id}
         expanded={expandedIds.has(job.id)}
@@ -281,10 +273,8 @@ export default function AppliedJobs() {
     );
   }
 
-  const rows = layout === "cards" ? chunk(filteredJobs, 2) : [];
-
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8">
+    <PageFrame>
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-white">Applied jobs</h1>
@@ -386,15 +376,8 @@ export default function AppliedJobs() {
       )}
 
       {jobs && filteredJobs.length > 0 && layout === "cards" && (
-        <div className="flex flex-col gap-4">
-          {rows.map((pair) => (
-            <div
-              key={pair.map((job) => job.id).join("-")}
-              className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:grid-rows-[auto_auto_minmax(0,1fr)_auto]"
-            >
-              {pair.map((job) => renderJob(job, filteredJobs.indexOf(job)))}
-            </div>
-          ))}
+        <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+          {filteredJobs.map((job, index) => renderJob(job, index))}
         </div>
       )}
 
@@ -413,13 +396,12 @@ export default function AppliedJobs() {
           onConfirm={handlePracticeConfirm}
         />
       )}
-    </div>
+    </PageFrame>
   );
 }
 
 function JobCard({
   job,
-  layout,
   avatarTheme,
   open,
   expanded,
@@ -439,11 +421,7 @@ function JobCard({
   const canExpand = narrative.length > 140;
 
   return (
-    <article
-      className={`flex min-w-0 flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg shadow-black/20 ${
-        layout === "cards" ? "sm:row-span-4 sm:grid sm:grid-rows-subgrid sm:gap-4" : ""
-      }`}
-    >
+    <article className="flex h-full min-w-0 flex-col gap-4 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg shadow-black/20">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div
@@ -452,19 +430,21 @@ function JobCard({
             {companyInitials(job.company)}
           </div>
           <div className="min-w-0">
-            <h3 className="truncate text-base font-semibold text-white">{job.role}</h3>
+            <h3 className="truncate text-base font-semibold text-white" title={job.role}>
+              {job.role}
+            </h3>
             <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-slate-400">
               <Building2 className="h-3.5 w-3.5 shrink-0" />
               {job.company}
             </p>
           </div>
         </div>
-        <label className="shrink-0">
+        <label className={`relative mr-1 inline-flex shrink-0 items-center rounded-full ${status.classes}`}>
           <span className="sr-only">Application status</span>
           <select
             value={job.status}
             onChange={(event) => onStatusChange(event.target.value)}
-            className={`rounded-full border-0 px-2.5 py-1 text-[11px] font-medium outline-none ${status.classes}`}
+            className="cursor-pointer appearance-none bg-transparent py-1 pl-3 pr-8 text-[11px] font-medium text-inherit outline-none"
           >
             {FILTERS.filter((item) => item.id !== "all").map((item) => (
               <option key={item.id} value={item.id} className="bg-slate-900 text-slate-100">
@@ -472,6 +452,7 @@ function JobCard({
               </option>
             ))}
           </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
         </label>
       </div>
 
@@ -504,7 +485,9 @@ function JobCard({
         )}
         {narrative && (
           <div>
-            <p className={`whitespace-pre-wrap text-xs leading-5 text-slate-500 ${expanded ? "" : "line-clamp-3"}`}>{narrative}</p>
+            <p className={`break-words whitespace-pre-wrap text-xs leading-5 text-slate-500 ${expanded ? "" : "line-clamp-3"}`}>
+              {narrative}
+            </p>
             {canExpand && (
               <button
                 type="button"
@@ -518,7 +501,7 @@ function JobCard({
         )}
       </div>
 
-      <div className="flex h-full flex-col gap-3 border-t border-slate-800/80 pt-4">
+      <div className="mt-auto flex flex-col gap-3 border-t border-slate-800/80 pt-4">
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs font-medium text-slate-500">{job.salary}</span>
           <span className="flex items-center gap-3">
@@ -565,7 +548,7 @@ function JobCard({
               <button
                 type="button"
                 onClick={onPractice}
-                className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-indigo-400/50 hover:text-white"
+                className="whitespace-nowrap rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-indigo-400/50 hover:text-white"
               >
                 New interview
               </button>

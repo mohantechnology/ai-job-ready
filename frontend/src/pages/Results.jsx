@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { ChevronDown, ChevronUp, Code2, PenSquare } from "lucide-react";
 import { getInterview, getWhiteboardSubmissionImageUrl } from "../lib/api.js";
 
@@ -10,7 +10,6 @@ const TABS = [
 
 export default function Results() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const [interview, setInterview] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [whiteboardSubmissions, setWhiteboardSubmissions] = useState([]);
@@ -48,8 +47,8 @@ export default function Results() {
   return (
     <div className="flex min-h-screen flex-col items-center px-4 py-10">
       <div className="w-full max-w-3xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-semibold text-white">{interview.jobTitle || "Interview"} complete</h1>
             <p className="mt-1 text-sm capitalize text-slate-400">
               {interview.role} &middot;{" "}
@@ -59,13 +58,12 @@ export default function Results() {
               &middot; {interview.topics.join(", ")}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => navigate("/dashboard")}
-            className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:border-indigo-400 hover:text-indigo-300"
+          <Link
+            to="/interviews"
+            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:border-indigo-400 hover:text-indigo-300"
           >
             Back to interviews
-          </button>
+          </Link>
         </div>
 
         <div className="mb-6 flex gap-2 rounded-xl border border-slate-800 bg-slate-900/40 p-1">

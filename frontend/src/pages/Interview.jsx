@@ -88,7 +88,7 @@ export default function Interview() {
         if (data.status === "completed") {
           // Landed here via browser back/forward or a stale link after the
           // interview already finished - don't let it be re-started.
-          navigate(`/results/${id}`, { replace: true });
+          navigate(`/interviews/results/${id}`, { replace: true });
           return;
         }
         setInterview(data);
@@ -106,7 +106,7 @@ export default function Interview() {
     if (status === "ended") {
       // Replace so the back button can't return to this now-finished
       // interview page and accidentally re-trigger the call.
-      navigate(`/results/${id}`, { replace: true });
+      navigate(`/interviews/results/${id}`, { replace: true });
     }
   }, [status, id, navigate]);
 

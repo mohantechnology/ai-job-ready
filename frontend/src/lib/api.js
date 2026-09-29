@@ -90,6 +90,13 @@ export function getMe() {
   return request("/auth/me");
 }
 
+export function updateAccount(payload) {
+  return request("/auth/account", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function createInterview(payload) {
   return request("/interviews", {
     method: "POST",
@@ -129,18 +136,26 @@ export function researchAppliedJob(appliedJobId) {
   });
 }
 
+function rangeQuery(rangeOrOptions = "this_week") {
+  const options = typeof rangeOrOptions === "string" ? { range: rangeOrOptions } : rangeOrOptions || {};
+  const params = new URLSearchParams({ range: options.range || "this_week" });
+  if (options.range === "custom" && options.from && options.to) {
+    params.set("from", options.from);
+    params.set("to", options.to);
+  }
+  return params;
+}
+
 // Learning progress aggregated across completed interviews.
-// range: this_week | last_week | this_month | last_month | all
-export function getProgress(range = "this_week") {
-  const params = new URLSearchParams({ range });
-  return request(`/progress?${params}`);
+// range: this_week | last_week | this_month | last_month | all | custom
+export function getProgress(rangeOrOptions = "this_week") {
+  return request(`/progress?${rangeQuery(rangeOrOptions)}`);
 }
 
 // Home dashboard: interview progress plus applied-job pipeline stats.
-// range: this_week | last_week | this_month | last_month | all
-export function getDashboard(range = "this_week") {
-  const params = new URLSearchParams({ range });
-  return request(`/dashboard?${params}`);
+// range: this_week | last_week | this_month | last_month | all | custom
+export function getDashboard(rangeOrOptions = "this_week") {
+  return request(`/dashboard?${rangeQuery(rangeOrOptions)}`);
 }
 
 export function getLatestResume() {

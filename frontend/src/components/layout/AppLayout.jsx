@@ -40,7 +40,7 @@ export default function AppLayout() {
     <div className="flex min-h-screen bg-slate-950">
       {/* Desktop sidebar */}
       <aside className={`hidden shrink-0 transition-[width] duration-200 lg:block ${collapsed ? "lg:w-20" : "lg:w-72"}`}>
-        <div className={`fixed inset-y-0 left-0 transition-[width] duration-200 ${collapsed ? "w-20" : "w-72"}`}>
+        <div className={`fixed inset-y-0 left-0 z-40 transition-[width] duration-200 ${collapsed ? "w-20" : "w-72"}`}>
           <Sidebar collapsed={collapsed} onToggleCollapse={toggleCollapsed} />
         </div>
       </aside>

@@ -140,7 +140,7 @@ export default function SetupWizard() {
         assistanceLevel,
         appliedJobId: prefill?.prefillAppliedJobId || undefined,
       });
-      navigate("/dashboard");
+      navigate("/interviews");
     } catch (err) {
       setError(err.message || "Something went wrong creating your interview.");
     } finally {

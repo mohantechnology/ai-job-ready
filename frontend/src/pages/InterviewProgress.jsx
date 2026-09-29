@@ -1,15 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { getProgress } from "../lib/api.js";
-
-const RANGES = [
-  { id: "this_week", label: "This week" },
-  { id: "last_week", label: "Last week" },
-  { id: "this_month", label: "This month" },
-  { id: "last_month", label: "Last month" },
-  { id: "all", label: "All time" },
-];
+import { formatUtcDay, normalizeRange } from "../lib/dateRange.js";
+import PageFrame from "../components/layout/PageFrame.jsx";
+import RangeFilter from "../components/dashboard/RangeFilter.jsx";
 
 function masteryMeta(avgScore) {
   if (avgScore == null) return { label: "No scores yet", tone: "muted" };
@@ -27,7 +22,10 @@ const TONE = {
   muted: { text: "text-slate-400", soft: "bg-slate-700/40 text-slate-300", bar: "from-slate-500 to-slate-400" },
 };
 
-function formatRangeLabel(start, end, range) {
+function formatRangeLabel(start, end, range, selection) {
+  if (range === "custom" && selection?.from && selection?.to) {
+    return `${formatUtcDay(selection.from, true)} – ${formatUtcDay(selection.to, true)}`;
+  }
   if (range === "all" || (!start && !end)) return "All time";
   const opts = { month: "short", day: "numeric", year: "numeric" };
   const startLabel = start ? new Date(start).toLocaleDateString(undefined, opts) : "…";
@@ -51,10 +49,14 @@ function buildChartPaths(points, width, height, padX = 8, padY = 16) {
 }
 
 export default function InterviewProgress() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const requested = searchParams.get("range");
-  const range = RANGES.some((item) => item.id === requested) ? requested : "this_week";
+  const rangeParam = searchParams.get("range") || "this_week";
+  const fromParam = searchParams.get("from") || "";
+  const toParam = searchParams.get("to") || "";
+  const selection = useMemo(
+    () => normalizeRange({ range: rangeParam, from: fromParam, to: toParam }),
+    [rangeParam, fromParam, toParam]
+  );
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -65,7 +67,7 @@ export default function InterviewProgress() {
     let cancelled = false;
     setLoading(true);
     setError("");
-    getProgress(range)
+    getProgress(selection)
       .then((payload) => {
         if (!cancelled) {
           setData(payload);
@@ -82,7 +84,7 @@ export default function InterviewProgress() {
     return () => {
       cancelled = true;
     };
-  }, [range]);
+  }, [selection]);
 
   const conceptsByTopic = useMemo(() => {
     const map = new Map();
@@ -101,48 +103,40 @@ export default function InterviewProgress() {
   const avg = summary?.avgOverallScore;
 
   function selectRange(next) {
-    setSearchParams({ range: next });
+    if (next.range === "custom") {
+      setSearchParams({ range: "custom", from: next.from, to: next.to });
+      return;
+    }
+    setSearchParams({ range: next.range });
   }
 
   return (
-    <div className="min-h-full bg-slate-950">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-8">
+    <div className="min-h-full">
+      <PageFrame className="flex flex-col gap-5">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigate("/progress")}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 text-slate-300 transition hover:bg-white/[0.06] hover:text-white"
+            <Link
+              to="/dashboard"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 text-slate-300 transition hover:bg-white/[0.06] hover:text-white"
               aria-label="Back to dashboard"
             >
               <ArrowLeft className="h-4 w-4" />
-            </button>
+            </Link>
             <div>
               <h1 className="text-lg font-semibold text-white">Interview progress</h1>
-              {data && <p className="text-xs text-slate-500">{formatRangeLabel(data.rangeStart, data.rangeEnd, data.range)}</p>}
+              {data && (
+                <p className="text-xs text-slate-500">{formatRangeLabel(data.rangeStart, data.rangeEnd, data.range, selection)}</p>
+              )}
             </div>
           </div>
-          <div className="flex flex-wrap rounded-xl border border-white/10 bg-white/[0.03] p-1">
-            {RANGES.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => selectRange(item.id)}
-                className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
-                  range === item.id ? "bg-white text-slate-900" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+          <RangeFilter value={selection} onChange={selectRange} />
         </header>
 
         {error && <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</div>}
         {loading && <div className="h-64 animate-pulse rounded-2xl bg-white/[0.04]" />}
 
         {!loading && data && summary && (
-          <div key={range} className="space-y-5">
+          <div key={`${selection.range}:${selection.from}:${selection.to}`} className="space-y-5">
             <section className="rounded-[1.75rem] border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.02] px-5 py-7 sm:px-8">
               <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-center lg:justify-between lg:gap-12">
                 <ScoreDial score={avg} interviews={summary.interviewsCompleted} />
@@ -246,7 +240,7 @@ export default function InterviewProgress() {
             </section>
           </div>
         )}
-      </div>
+      </PageFrame>
     </div>
   );
 }

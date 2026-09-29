@@ -1,10 +1,11 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { Briefcase, IdCard, LayoutDashboard, LogOut, MessageSquare, Mic, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { Briefcase, IdCard, LayoutDashboard, MessageSquare, Mic, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
+import AccountMenu from "./AccountMenu.jsx";
 
 const NAV_ITEMS = [
-  { to: "/progress", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/dashboard", label: "Interviews", icon: MessageSquare },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/interviews", label: "Interviews", icon: MessageSquare, end: true },
   { to: "/applied-jobs", label: "Applied Jobs", icon: Briefcase },
   { to: "/job-profile", label: "Job Profile", icon: IdCard },
 ];
@@ -45,10 +46,11 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, onNavigat
       {/* Nav */}
       <nav className={`mt-6 flex-1 space-y-1 ${collapsed ? "px-2" : "px-3"}`}>
         {!collapsed && <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">Menu</p>}
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+        {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
+            end={end}
             onClick={onNavigate}
             title={collapsed ? label : undefined}
             className={({ isActive }) =>
@@ -89,28 +91,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, onNavigat
         </div>
       )}
 
-      {/* User / logout */}
       <div className={`border-t border-slate-800/80 ${collapsed ? "p-2" : "p-4"}`}>
-        <div className={`flex items-center gap-3 rounded-xl py-2 ${collapsed ? "flex-col gap-2 px-0" : "px-2"}`}>
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-800 text-sm font-semibold text-slate-200">
-            {user?.name?.[0]?.toUpperCase() || "U"}
-          </div>
-          {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-white">{user?.name || "Guest"}</p>
-              <p className="truncate text-xs text-slate-500">{user?.email || ""}</p>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={handleLogout}
-            title="Log out"
-            aria-label="Log out"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-red-500/10 hover:text-red-300"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
+        <AccountMenu collapsed={collapsed} user={user} onLogout={handleLogout} onNavigate={onNavigate} flyout={!onClose} />
       </div>
     </div>
   );

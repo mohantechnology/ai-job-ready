@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { ScrollText } from "lucide-react";
 import AdditionalDetailsModal from "./AdditionalDetailsModal.jsx";
 
@@ -14,7 +15,12 @@ const STATUS_LABELS = {
   completed: "Completed",
 };
 
-export default function InterviewCard({ interview, onClick }) {
+function interviewHref(interview) {
+  if (interview.status === "completed") return `/interviews/results/${interview.id}`;
+  return `/interviews/mic-check/${interview.id}`;
+}
+
+export default function InterviewCard({ interview }) {
   const { jobTitle, role, typeOfInterview, typeOfInterviewOther, topics, numberOfQuestions, status, createdAt, summary, additionalInfo } =
     interview;
   const typeLabel = typeOfInterview === "other" ? typeOfInterviewOther || "other" : typeOfInterview;
@@ -24,9 +30,9 @@ export default function InterviewCard({ interview, onClick }) {
 
   return (
     <>
-      <div className="relative flex w-full flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left shadow-lg shadow-black/20 transition hover:border-indigo-400/60 hover:bg-slate-900">
-        <button type="button" onClick={onClick} className="absolute inset-0 z-0 rounded-2xl" aria-label={`Open ${title}`} />
-        <div className="pointer-events-none relative z-10 flex flex-col gap-4">
+      <div className="relative flex h-full w-full flex-col rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left shadow-lg shadow-black/20 transition hover:border-indigo-400/60 hover:bg-slate-900">
+        <Link to={interviewHref(interview)} className="absolute inset-0 z-0 rounded-2xl" aria-label={`Open ${title}`} />
+        <div className="pointer-events-none relative z-10 flex flex-1 flex-col gap-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-base font-semibold text-white">{title}</h3>
@@ -70,13 +76,13 @@ export default function InterviewCard({ interview, onClick }) {
             ))}
           </div>
 
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>{numberOfQuestions} questions</span>
+          <div className="mt-auto flex items-center justify-between gap-3 text-xs text-slate-400">
+            <span className="whitespace-nowrap">{numberOfQuestions} questions</span>
             {status === "completed" && summary && (
-              <span className="font-semibold text-emerald-300">Score: {summary.overallScore}/100</span>
+              <span className="whitespace-nowrap font-semibold text-emerald-300">Score: {summary.overallScore}/100</span>
             )}
-            {status !== "completed" && <span className="font-medium text-indigo-300">Click to start &rarr;</span>}
-            {status === "completed" && <span className="font-medium text-indigo-300">View results &rarr;</span>}
+            {status !== "completed" && <span className="whitespace-nowrap font-medium text-indigo-300">Click to start &rarr;</span>}
+            {status === "completed" && <span className="whitespace-nowrap font-medium text-indigo-300">View results &rarr;</span>}
           </div>
         </div>
       </div>

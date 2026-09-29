@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
 import AppLayout from "./components/layout/AppLayout.jsx";
@@ -10,9 +10,20 @@ import Progress from "./pages/Progress.jsx";
 import InterviewProgress from "./pages/InterviewProgress.jsx";
 import AppliedJobs from "./pages/AppliedJobs.jsx";
 import JobProfile from "./pages/JobProfile.jsx";
+import AccountProfile from "./pages/AccountProfile.jsx";
 import MicCheck from "./pages/MicCheck.jsx";
 import Interview from "./pages/Interview.jsx";
 import Results from "./pages/Results.jsx";
+
+function SearchRedirect({ to }) {
+  const location = useLocation();
+  return <Navigate to={`${to}${location.search}`} replace />;
+}
+
+function IdRedirect({ to }) {
+  const { id } = useParams();
+  return <Navigate to={`${to}/${id}`} replace />;
+}
 
 export default function App() {
   return (
@@ -21,15 +32,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-          <Route
-            path="/"
-            element={
-              <RequireAuth>
-                <SetupWizard />
-              </RequireAuth>
-            }
-          />
           <Route
             element={
               <RequireAuth>
@@ -37,15 +41,26 @@ export default function App() {
               </RequireAuth>
             }
           >
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/progress" element={<Progress />} />
-            <Route path="/interview-progress" element={<InterviewProgress />} />
+            <Route path="/dashboard" element={<Progress />} />
+            <Route path="/dashboard/interview-progress" element={<InterviewProgress />} />
+            <Route path="/interviews" element={<Dashboard />} />
             <Route path="/applied-jobs" element={<AppliedJobs />} />
             <Route path="/job-profile" element={<JobProfile />} />
+            <Route path="/setting/profile" element={<AccountProfile />} />
+            <Route path="/progress" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/interview-progress" element={<SearchRedirect to="/dashboard/interview-progress" />} />
           </Route>
 
           <Route
-            path="/mic-check/:id"
+            path="/interviews/create"
+            element={
+              <RequireAuth>
+                <SetupWizard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/interviews/mic-check/:id"
             element={
               <RequireAuth>
                 <MicCheck />
@@ -53,23 +68,27 @@ export default function App() {
             }
           />
           <Route
-            path="/interview/:id"
-            element={
-              <RequireAuth>
-                <Interview />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/results/:id"
+            path="/interviews/results/:id"
             element={
               <RequireAuth>
                 <Results />
               </RequireAuth>
             }
           />
+          <Route
+            path="/interviews/:id"
+            element={
+              <RequireAuth>
+                <Interview />
+              </RequireAuth>
+            }
+          />
 
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/mic-check/:id" element={<IdRedirect to="/interviews/mic-check" />} />
+          <Route path="/interview/:id" element={<IdRedirect to="/interviews" />} />
+          <Route path="/results/:id" element={<IdRedirect to="/interviews/results" />} />
+
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </div>
     </AuthProvider>
