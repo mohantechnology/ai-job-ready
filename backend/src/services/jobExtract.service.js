@@ -91,7 +91,7 @@ export function normalizeTopics(raw) {
   return topics.length ? topics : ["General"];
 }
 
-function sanitizeMeta(meta) {
+export function sanitizeMeta(meta) {
   if (!meta || typeof meta !== "object" || Array.isArray(meta)) return {};
   const next = {};
   for (const key of ["url", "title", "description", "ogTitle", "ogSiteName", "ogDescription", "heading"]) {

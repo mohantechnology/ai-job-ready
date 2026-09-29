@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 
 import { AUTH_USER_KEY, ACCESS_TOKEN_KEY, type AuthUser } from "~lib/auth"
-import { sendMessageWithTimeout } from "~lib/messaging"
+import { PANEL_CLOSED_KEY, sendMessageWithTimeout } from "~lib/messaging"
+import { PANEL_REVEAL_KEY } from "~lib/panelLayout"
 import {
   API_BASE_URL_KEY,
   DEFAULT_API_BASE_URL,
@@ -274,6 +275,8 @@ function IndexPopup() {
 
     loadAuth()
     loadApiUrl()
+    // Opening this popup is the toolbar-icon click. Reveal the on-page panel.
+    chrome.storage.local.set({ [PANEL_CLOSED_KEY]: false, [PANEL_REVEAL_KEY]: Date.now() }).catch(() => {})
 
     const onChanged = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
       if (area !== "local") return
@@ -501,7 +504,7 @@ function IndexPopup() {
         {backendSection}
 
         <p className="jr-hint" style={{ textAlign: "center" }}>
-          Open the ⚡ button on a job application page to autofill it.
+          Clicking this icon opens the assistant on the job page. Drag its header to move it, and the edges to resize it.
         </p>
       </div>
     </div>

@@ -7,6 +7,7 @@ import {
 } from "../repositories/appliedJob.repository.js";
 import { saveQuestions } from "../repositories/interviewQuestions.repository.js";
 import { extractJobFromPage, normalizeSourceUrl, sourceKeyForUrl } from "../services/jobExtract.service.js";
+import { summarizeJobPage } from "../services/jobSummary.service.js";
 import { researchJobAndCompany } from "../services/jobResearch.service.js";
 import { generateInterviewQuestions } from "../services/questionGeneration.service.js";
 import { createInterview, getLatestResumeForUser } from "../store/interviewStore.js";
@@ -97,6 +98,26 @@ export async function saveAppliedJobHandler(req, res) {
   const saved = await getAppliedJob(job.id, req.userId);
   const interviews = (await listAppliedJobs(req.userId)).find((item) => item.id === job.id)?.interviews || [];
   res.status(created ? 201 : 200).json({ job: { ...saved, interviews }, created });
+}
+
+export async function summarizeJobPageHandler(req, res) {
+  const { pageHtml, meta } = req.body || {};
+  if (typeof pageHtml !== "string" || pageHtml.trim().length === 0) {
+    throw new ApiError(400, "pageHtml is required");
+  }
+  if (meta != null && (typeof meta !== "object" || Array.isArray(meta))) {
+    throw new ApiError(400, "meta must be an object");
+  }
+
+  let result;
+  try {
+    result = await summarizeJobPage({ pageHtml, meta, userId: req.userId });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not summarize this page.";
+    throw new ApiError(502, message);
+  }
+
+  res.json(result);
 }
 
 export async function listAppliedJobsHandler(req, res) {

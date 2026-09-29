@@ -235,6 +235,59 @@ export type SaveJobResult = {
   company?: string
 }
 
+/** chrome.storage.local flag. True hides the on-page panel until the toolbar icon is clicked. */
+export const PANEL_CLOSED_KEY = "jobbot:panelClosed"
+
+export type JobFitSignal = {
+  item: string
+  status: "match" | "partial" | "missing"
+  note: string
+}
+
+export type JobSummaryPayload = {
+  isJobPosting: boolean
+  note: string
+  job: {
+    company: string
+    role: string
+    level: string
+    location: string
+    workMode: string
+    salary: string
+    summary: string
+    requirements: string[]
+    importantPoints: string[]
+  } | null
+  fit: {
+    available: boolean
+    note: string
+    matchedCount: number
+    partialCount: number
+    missingCount: number
+    comparedCount: number
+    fitScore: number
+    fitLabel: string
+    hearBack: string
+    hearBackNote: string
+    strengths: string[]
+    gaps: string[]
+    signals: JobFitSignal[]
+  }
+}
+
+/** On-page panel → background: summarize the posting and score it against the profile. */
+export type SummarizeJobMessage = {
+  type: "SUMMARIZE_JOB"
+  pageHtml: string
+  meta: PageMeta
+}
+
+export type SummarizeJobResult = {
+  ok: boolean
+  error?: string
+  summary?: JobSummaryPayload
+}
+
 export type ExtensionMessage =
   | FieldsDetectedMessage
   | RequestFillMessage
@@ -247,6 +300,7 @@ export type ExtensionMessage =
   | LogoutMessage
   | OpenLoginMessage
   | SaveJobMessage
+  | SummarizeJobMessage
 
 export type BackendFillRequest = {
   pageHtml: string

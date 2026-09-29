@@ -17,6 +17,7 @@ import type {
   RequestFillResult,
   SaveAnswerResult,
   SaveJobResult,
+  SummarizeJobResult,
   UserDetailField
 } from "~lib/messaging"
 import { FILL_REQUEST_TIMEOUT_MS, LAST_FILL_RESULT_KEY } from "~lib/messaging"
@@ -451,6 +452,69 @@ async function handleSaveJob(pageHtml: string, meta: PageMeta): Promise<SaveJobR
   }
 }
 
+function backendErrorMessage(data: unknown, status: number): string {
+  if (data && typeof data === "object") {
+    const body = data as { error?: unknown }
+    if (typeof body.error === "string" && body.error.trim()) return body.error
+    if (body.error && typeof body.error === "object" && "message" in body.error) {
+      const message = (body.error as { message?: unknown }).message
+      if (typeof message === "string" && message.trim()) return message
+    }
+  }
+  return `Backend responded with ${status}`
+}
+
+async function handleSummarizeJob(pageHtml: string, meta: PageMeta): Promise<SummarizeJobResult> {
+  const stopKeepAlive = startKeepAlive()
+  try {
+    if (typeof pageHtml !== "string" || pageHtml.trim().length < 40) {
+      return { ok: false, error: "This page does not have enough content to analyze." }
+    }
+
+    const auth = await getAuthHeaders()
+    if (!auth) {
+      return { ok: false, error: "Sign in to JobReady to analyze jobs." }
+    }
+
+    const apiBaseUrl = await getApiBaseUrl()
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), FILL_FETCH_TIMEOUT_MS)
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/applied-jobs/summary`, {
+        method: "POST",
+        headers: auth.headers,
+        body: JSON.stringify({ pageHtml, meta }),
+        signal: controller.signal
+      })
+      if (response.status === 401) {
+        await handleUnauthorized()
+        return { ok: false, error: "Your session expired. Sign in again to continue." }
+      }
+      const data = await response.json().catch(() => null)
+      if (!response.ok) {
+        return { ok: false, error: backendErrorMessage(data, response.status) }
+      }
+      if (!data || typeof data !== "object" || typeof data.isJobPosting !== "boolean") {
+        return { ok: false, error: "Could not analyze this page right now." }
+      }
+      return { ok: true, summary: data }
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return { ok: false, error: "Analyzing this page took too long. Please try again." }
+      }
+      console.error("[job-bot] failed to summarize job:", err)
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "Unknown error while summarizing this page."
+      }
+    } finally {
+      clearTimeout(timer)
+    }
+  } finally {
+    stopKeepAlive()
+  }
+}
+
 async function handleSaveDetails(fields: UserDetailField[]): Promise<SaveAnswerResult> {
   try {
     const auth = await getAuthHeaders()
@@ -521,6 +585,11 @@ chrome.runtime.onMessage.addListener(
 
     if (message.type === "SAVE_JOB") {
       handleSaveJob(message.pageHtml, message.meta).then(sendResponse)
+      return true
+    }
+
+    if (message.type === "SUMMARIZE_JOB") {
+      handleSummarizeJob(message.pageHtml, message.meta).then(sendResponse)
       return true
     }
 
