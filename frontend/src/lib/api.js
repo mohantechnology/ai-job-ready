@@ -136,6 +136,13 @@ export function getProgress(range = "this_week") {
   return request(`/progress?${params}`);
 }
 
+// Home dashboard: interview progress plus applied-job pipeline stats.
+// range: this_week | last_week | this_month | last_month | all
+export function getDashboard(range = "this_week") {
+  const params = new URLSearchParams({ range });
+  return request(`/dashboard?${params}`);
+}
+
 export function getLatestResume() {
   return request("/interviews/resume/latest");
 }

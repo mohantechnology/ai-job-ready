@@ -9,6 +9,7 @@ import { pool } from "./db/pool.js";
 import authRoutes from "./routes/auth.routes.js";
 import interviewRoutes from "./routes/interview.routes.js";
 import progressRoutes from "./routes/progress.routes.js";
+import dashboardRoutes from "./routes/dashboard.routes.js";
 import realtimeRoutes from "./routes/realtime.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
 import jobbotFormRoutes from "./routes/jobbotForm.routes.js";
@@ -56,6 +57,7 @@ app.get("/health", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/interviews", interviewRoutes);
 app.use("/api/progress", progressRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/realtime", realtimeRoutes);
 app.use("/api/webhook", webhookRoutes);
 

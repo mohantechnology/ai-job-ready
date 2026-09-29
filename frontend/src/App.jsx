@@ -7,6 +7,7 @@ import Register from "./pages/Register.jsx";
 import SetupWizard from "./pages/SetupWizard.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Progress from "./pages/Progress.jsx";
+import InterviewProgress from "./pages/InterviewProgress.jsx";
 import AppliedJobs from "./pages/AppliedJobs.jsx";
 import JobProfile from "./pages/JobProfile.jsx";
 import MicCheck from "./pages/MicCheck.jsx";
@@ -38,6 +39,7 @@ export default function App() {
           >
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/progress" element={<Progress />} />
+            <Route path="/interview-progress" element={<InterviewProgress />} />
             <Route path="/applied-jobs" element={<AppliedJobs />} />
             <Route path="/job-profile" element={<JobProfile />} />
           </Route>
