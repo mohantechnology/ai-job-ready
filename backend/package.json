@@ -2,15 +2,18 @@
   "name": "voice-interviewer-backend",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
-  "description": "Express backend for the OpenAI Realtime voice interviewer app",
-  "main": "src/server.js",
+  "description": "NestJS backend for the OpenAI Realtime voice interviewer app",
+  "main": "dist/main.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "dev": "nest start --watch"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.28",
+    "@nestjs/common": "^12.1.2",
+    "@nestjs/core": "^12.1.2",
+    "@nestjs/platform-express": "^12.1.2",
     "@toon-format/toon": "^4.1.1",
     "bcryptjs": "^3.0.3",
     "connect-pg-simple": "^10.0.0",
@@ -24,6 +27,19 @@
     "node-html-parser": "^9.0.1",
     "openai": "^4.71.1",
     "pg": "^8.22.0",
+    "reflect-metadata": "^0.2.2",
     "turndown": "^7.2.4"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^12.0.8",
+    "@nestjs/schematics": "^12.0.6",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^5.0.6",
+    "@types/express-session": "^1.19.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^26.6.3",
+    "@types/pg": "^8.23.1",
+    "typescript": "^6.0.3"
   }
 }
