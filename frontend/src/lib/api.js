@@ -158,6 +158,25 @@ export function getDashboard(rangeOrOptions = "this_week") {
   return request(`/dashboard?${rangeQuery(rangeOrOptions)}`);
 }
 
+export function getAdminStats() {
+  return request("/admin/stats");
+}
+
+export function listAdminUsers() {
+  return request("/admin/users");
+}
+
+export function updateAdminUser(id, payload) {
+  return request(`/admin/users/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAdminUser(id) {
+  return request(`/admin/users/${id}`, { method: "DELETE" });
+}
+
 export function getLatestResume() {
   return request("/interviews/resume/latest");
 }

@@ -1,5 +1,17 @@
-import { NavLink, useNavigate } from "react-router-dom";
-import { Briefcase, IdCard, LayoutDashboard, MessageSquare, Mic, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import {
+  Briefcase,
+  IdCard,
+  LayoutDashboard,
+  MessageSquare,
+  Mic,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Shield,
+  UserRound,
+  Users,
+  X,
+} from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
 import AccountMenu from "./AccountMenu.jsx";
 
@@ -10,11 +22,22 @@ const NAV_ITEMS = [
   { to: "/job-profile", label: "Job Profile", icon: IdCard },
 ];
 
+const ADMIN_NAV_ITEMS = [
+  { to: "/admin", label: "Admin Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/admin/users", label: "Users", icon: Users },
+];
+
 const APP_NAME = "JobReady";
 
 export default function Sidebar({ collapsed = false, onToggleCollapse, onNavigate, onClose }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const adminMode = location.pathname === "/admin" || location.pathname.startsWith("/admin/");
+  const navItems = isAdmin && adminMode ? ADMIN_NAV_ITEMS : NAV_ITEMS;
+  const modeLabel = adminMode ? "Switch to User mode" : "Switch to Admin mode";
+  const ModeIcon = adminMode ? UserRound : Shield;
 
   async function handleLogout() {
     await logout();
@@ -46,7 +69,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, onNavigat
       {/* Nav */}
       <nav className={`mt-6 flex-1 space-y-1 ${collapsed ? "px-2" : "px-3"}`}>
         {!collapsed && <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">Menu</p>}
-        {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
+        {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
@@ -76,6 +99,24 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, onNavigat
           </NavLink>
         ))}
       </nav>
+
+      {isAdmin && (
+        <div className={`border-t border-slate-800/80 pt-2 ${collapsed ? "px-2" : "px-3"}`}>
+          <NavLink
+            to={adminMode ? "/dashboard" : "/admin"}
+            onClick={onNavigate}
+            title={modeLabel}
+            className={`group flex items-center rounded-xl text-sm font-medium text-amber-200/90 transition hover:bg-slate-800/70 hover:text-amber-100 ${
+              collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5"
+            }`}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-300">
+              <ModeIcon className="h-4 w-4" />
+            </span>
+            {!collapsed && modeLabel}
+          </NavLink>
+        </div>
+      )}
 
       {/* Collapse toggle (desktop only) */}
       {onToggleCollapse && (

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
+import RequireAdmin from "./components/RequireAdmin.jsx";
 import AppLayout from "./components/layout/AppLayout.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
@@ -14,6 +15,8 @@ import AccountProfile from "./pages/AccountProfile.jsx";
 import MicCheck from "./pages/MicCheck.jsx";
 import Interview from "./pages/Interview.jsx";
 import Results from "./pages/Results.jsx";
+import AdminDashboard from "./pages/AdminDashboard.jsx";
+import AdminUsers from "./pages/AdminUsers.jsx";
 
 function SearchRedirect({ to }) {
   const location = useLocation();
@@ -47,6 +50,10 @@ export default function App() {
             <Route path="/applied-jobs" element={<AppliedJobs />} />
             <Route path="/job-profile" element={<JobProfile />} />
             <Route path="/setting/profile" element={<AccountProfile />} />
+            <Route element={<RequireAdmin />}>
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/users" element={<AdminUsers />} />
+            </Route>
             <Route path="/progress" element={<Navigate to="/dashboard" replace />} />
             <Route path="/interview-progress" element={<SearchRedirect to="/dashboard/interview-progress" />} />
           </Route>

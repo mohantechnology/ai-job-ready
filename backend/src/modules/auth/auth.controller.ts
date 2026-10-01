@@ -6,6 +6,7 @@ import { Public } from "../../common/decorators/public.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { signToken } from "../../common/auth/jwt";
+import { resolveAccountRole } from "../../common/auth/account-role";
 import {
   createUser,
   findUserByEmail,
@@ -22,6 +23,7 @@ function publicUser(user) {
     name: user.name,
     email: user.email,
     createdAt: user.created_at || null,
+    role: resolveAccountRole(user.email),
   };
 }
 

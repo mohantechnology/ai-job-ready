@@ -25,7 +25,7 @@ export class RolesGuard implements CanActivate {
 
     const user = context.switchToHttp().getRequest<Request>().user;
     if (!user || !required.includes(user.role)) {
-      throw new ApiError(403, "Admin access required");
+      throw new ApiError(403, "Admin access denied");
     }
     return true;
   }
