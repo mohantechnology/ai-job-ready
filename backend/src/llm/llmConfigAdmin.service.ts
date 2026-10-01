@@ -1,6 +1,8 @@
 import { ApiError } from "../common/errors/api-error";
 import {
+  deleteLlmApiKey,
   deleteLlmSetting,
+  insertLlmApiKey,
   upsertLlmSetting,
   type LlmSettingRow,
 } from "../repositories/llmConfig.repository";
@@ -9,7 +11,9 @@ import {
   defaultModelFor,
   defaultProviderFor,
   environmentApiKey,
+  listCachedApiKeys,
   loadLlmConfigForAdmin,
+  readCachedApiKey,
   readCachedLlmSetting,
   replaceCachedLlmSetting,
 } from "./llmConfig.store";
@@ -24,6 +28,7 @@ const MAX_PROMPT_CHARS = 100_000;
 const MAX_NAME_CHARS = 80;
 const MAX_MODEL_CHARS = 120;
 const MAX_KEY_CHARS = 500;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function sameText(left: string, right: string) {
   return left.replace(/\r\n/g, "\n").trim() === right.replace(/\r\n/g, "\n").trim();
@@ -40,12 +45,26 @@ function hasOverride(row: LlmSettingRow) {
     row.displayName ||
       row.provider ||
       row.model ||
-      row.apiKey ||
+      row.apiKeyId ||
       row.systemPrompt ||
       row.fastMode != null ||
       row.reasoningEffort ||
       row.maxTokens != null
   );
+}
+
+function presentApiKey(id: string) {
+  const key = readCachedApiKey(id);
+  if (!key) return null;
+  return {
+    id: key.id,
+    label: key.label,
+    provider: key.provider,
+    apiKey: key.apiKey,
+    apiKeyHint: maskKey(key.apiKey),
+    createdAt: key.createdAt,
+    updatedAt: key.updatedAt,
+  };
 }
 
 function presentFeature(featureKey: string) {
@@ -57,9 +76,11 @@ function presentFeature(featureKey: string) {
   const defaultPrompt = defaultPromptFor(feature.key);
   const customPrompt = row?.systemPrompt?.trim() ? row.systemPrompt : "";
   const envKey = environmentApiKey(provider);
-  const savedKey = row?.apiKey || "";
+  const linked = row?.apiKeyId ? readCachedApiKey(row.apiKeyId) : null;
+  const savedKey = linked && linked.provider === provider ? linked : null;
   return {
     key: feature.key,
+    group: feature.group,
     name: row?.displayName || feature.name,
     defaultName: feature.name,
     description: feature.description,
@@ -80,8 +101,9 @@ function presentFeature(featureKey: string) {
     systemPrompt: customPrompt || defaultPrompt,
     defaultPrompt,
     promptSource: customPrompt ? "database" : "default",
-    apiKeySet: Boolean(savedKey),
-    apiKeyHint: maskKey(savedKey),
+    apiKeyId: savedKey?.id || null,
+    apiKeyLabel: savedKey?.label || null,
+    apiKeyHint: savedKey ? maskKey(savedKey.apiKey) : null,
     apiKeySource: savedKey ? "database" : envKey ? "environment" : "missing",
     updatedAt: row?.updatedAt || null,
   };
@@ -94,6 +116,47 @@ export async function listManagedModels() {
   };
 }
 
+export async function listManagedApiKeys() {
+  await loadLlmConfigForAdmin();
+  return {
+    keys: listCachedApiKeys().map((key) => presentApiKey(key.id)).filter(Boolean),
+  };
+}
+
+export async function createManagedApiKey(body: Record<string, unknown>) {
+  await loadLlmConfigForAdmin();
+  const label = typeof body.label === "string" ? body.label.trim() : "";
+  if (!label) throw new ApiError(400, "Name is required");
+  if (label.length > MAX_NAME_CHARS) {
+    throw new ApiError(400, `Name must be ${MAX_NAME_CHARS} characters or fewer`);
+  }
+
+  const providerRaw = typeof body.provider === "string" ? body.provider.trim().toLowerCase() : "";
+  if (providerRaw !== "openai" && providerRaw !== "cursor") {
+    throw new ApiError(400, "Provider must be OpenAI or Cursor");
+  }
+
+  const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+  if (!apiKey) throw new ApiError(400, "API key is required");
+  if (apiKey.length > MAX_KEY_CHARS) throw new ApiError(400, "API key is too long");
+
+  const inserted = await insertLlmApiKey({ label, provider: providerRaw, apiKey });
+  await loadLlmConfigForAdmin();
+  const view = presentApiKey(inserted.id);
+  if (!view) throw new ApiError(500, "Could not save this API key");
+  return { key: view };
+}
+
+export async function deleteManagedApiKey(id: string) {
+  if (!UUID_RE.test(id)) throw new ApiError(400, "A valid API key id is required");
+  await loadLlmConfigForAdmin();
+  if (!readCachedApiKey(id)) throw new ApiError(404, "API key not found");
+  const deleted = await deleteLlmApiKey(id);
+  if (!deleted) throw new ApiError(404, "API key not found");
+  await loadLlmConfigForAdmin();
+  return { ok: true };
+}
+
 function requireFeature(featureKey: string) {
   const feature = findLlmFeature(featureKey);
   if (!feature) throw new ApiError(404, "That model feature was not found");
@@ -103,7 +166,6 @@ function requireFeature(featureKey: string) {
 export async function updateManagedModel(featureKey: string, body: Record<string, unknown>) {
   await loadLlmConfigForAdmin();
   const feature = requireFeature(featureKey);
-  const current = readCachedLlmSetting(feature.key);
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
   if (name.length > MAX_NAME_CHARS) {
@@ -145,15 +207,17 @@ export async function updateManagedModel(featureKey: string, body: Record<string
     throw new ApiError(400, "Prompt is too long");
   }
 
-  const action = body.apiKeyAction === "clear" || body.apiKeyAction === "set" ? body.apiKeyAction : "keep";
-  let apiKey = current?.apiKey || null;
-  if (action === "clear") {
-    apiKey = null;
-  } else if (action === "set") {
-    const nextKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
-    if (!nextKey) throw new ApiError(400, "Enter an API key or leave the field blank to keep the current one");
-    if (nextKey.length > MAX_KEY_CHARS) throw new ApiError(400, "API key is too long");
-    apiKey = nextKey;
+  let apiKeyId: string | null = null;
+  if (body.apiKeyId != null && body.apiKeyId !== "") {
+    if (typeof body.apiKeyId !== "string" || !UUID_RE.test(body.apiKeyId)) {
+      throw new ApiError(400, "Choose a saved API key");
+    }
+    const key = readCachedApiKey(body.apiKeyId);
+    if (!key) throw new ApiError(400, "Choose a saved API key");
+    if (key.provider !== provider) {
+      throw new ApiError(400, "That API key is for a different provider");
+    }
+    apiKeyId = key.id;
   }
 
   const defaultPrompt = defaultPromptFor(feature.key);
@@ -165,7 +229,7 @@ export async function updateManagedModel(featureKey: string, body: Record<string
     displayName: name && name !== feature.name ? name : null,
     provider: provider === defaultProvider ? null : provider,
     model: model === defaultModel ? null : model,
-    apiKey,
+    apiKeyId,
     systemPrompt: !prompt.trim() || sameText(prompt, defaultPrompt) ? null : prompt,
     fastMode: fastMode === feature.fastMode ? null : fastMode,
     reasoningEffort: reasoningRaw || null,

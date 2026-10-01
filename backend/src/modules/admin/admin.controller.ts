@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { AccountRole } from "../../common/auth/account-role";
@@ -6,7 +6,13 @@ import type { AuthUser } from "../../common/auth/auth-user";
 import { ApiError } from "../../common/errors/api-error";
 import { findUserByEmail, findUserById } from "../../repositories/user.repository";
 import { deleteAdminUser, getAdminStats, listAdminUsers, updateAdminUser } from "../../repositories/admin.repository";
-import { listManagedModels, updateManagedModel } from "../../llm/llmConfigAdmin.service";
+import {
+  createManagedApiKey,
+  deleteManagedApiKey,
+  listManagedApiKeys,
+  listManagedModels,
+  updateManagedModel,
+} from "../../llm/llmConfigAdmin.service";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -95,6 +101,21 @@ export class AdminController {
       throw new ApiError(404, "User not found");
     }
     return { ok: true };
+  }
+
+  @Get("api-keys")
+  async apiKeys() {
+    return listManagedApiKeys();
+  }
+
+  @Post("api-keys")
+  async createApiKey(@Body() body: Record<string, unknown>) {
+    return createManagedApiKey(body || {});
+  }
+
+  @Delete("api-keys/:id")
+  async removeApiKey(@Param("id") id: string) {
+    return deleteManagedApiKey(id);
   }
 
   @Get("models")

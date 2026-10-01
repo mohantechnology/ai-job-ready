@@ -228,6 +228,21 @@ export function updateManagedModel(featureKey, payload) {
   });
 }
 
+export function listApiKeys() {
+  return request("/admin/api-keys");
+}
+
+export function createApiKey(payload) {
+  return request("/admin/api-keys", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteApiKey(id) {
+  return request(`/admin/api-keys/${id}`, { method: "DELETE" });
+}
+
 export function getLatestResume() {
   return request("/interviews/resume/latest");
 }

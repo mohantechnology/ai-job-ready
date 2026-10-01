@@ -5,6 +5,8 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { fillFormFields as fillFormFieldsOpenAI } from "../../services/jobbotOpenai.service";
 import { fillFormFields as fillFormFieldsCursor } from "../../services/jobbotCursor.service";
+import { resolveLlmFeature } from "../../llm/llmConfig.store";
+import { INSTRUCTIONS } from "../../prompts/jobbotFillForm";
 
 type FillFn = (
   pageHtml: string,
@@ -56,7 +58,7 @@ export class JobFormController {
     @Res() res: Response,
     @Body() body: { pageHtml?: unknown; profile?: unknown; meta?: unknown }
   ) {
-    return this.handleFill(req, res, body, user.id, fillFormFieldsOpenAI, "openai");
+    return this.fillWithConfiguredProvider(req, res, body, user.id);
   }
 
   @Post("fill/cursor")
@@ -67,7 +69,18 @@ export class JobFormController {
     @Res() res: Response,
     @Body() body: { pageHtml?: unknown; profile?: unknown; meta?: unknown }
   ) {
-    return this.handleFill(req, res, body, user.id, fillFormFieldsCursor, "cursor");
+    return this.fillWithConfiguredProvider(req, res, body, user.id);
+  }
+
+  private async fillWithConfiguredProvider(
+    req: Request,
+    res: Response,
+    body: { pageHtml?: unknown; profile?: unknown; meta?: unknown },
+    userId: string
+  ) {
+    const cfg = await resolveLlmFeature("form_fill", INSTRUCTIONS);
+    const fillFn = cfg.provider === "cursor" ? fillFormFieldsCursor : fillFormFieldsOpenAI;
+    return this.handleFill(req, res, body, userId, fillFn, cfg.provider);
   }
 
   private async handleFill(

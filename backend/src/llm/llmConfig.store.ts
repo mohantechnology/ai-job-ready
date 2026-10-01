@@ -5,7 +5,12 @@ import {
   type LlmProviderName,
 } from "./llmFeatures";
 import {
+  deleteLlmSetting,
+  listLlmApiKeys,
   listLlmSettings,
+  migrateInlineApiKeys,
+  upsertLlmSetting,
+  type LlmApiKeyRow,
   type LlmSettingRow,
 } from "../repositories/llmConfig.repository";
 
@@ -26,6 +31,7 @@ export type ResolvedLlmFeature = {
 };
 
 let settings = new Map<string, LlmSettingRow>();
+let apiKeys = new Map<string, LlmApiKeyRow>();
 let ready = false;
 let loading: Promise<void> | null = null;
 let retryAfter = 0;
@@ -44,6 +50,9 @@ function modelFromEnv(token: string, provider: LlmProviderName) {
   if (token === "openaiChat") return env.openaiChatModel;
   if (token === "openaiRealtime") return env.openaiRealtimeModel;
   if (token === "cursor") return env.cursorModel || "composer-2.5";
+  if (token === "formFill") {
+    return provider === "openai" ? "gpt-5-nano" : env.cursorModel || "composer-2.5";
+  }
   if (token === "matchProvider") {
     return provider === "openai" ? env.openaiChatModel : env.cursorModel || "composer-2.5";
   }
@@ -66,9 +75,45 @@ export function replaceCachedLlmSetting(featureKey: string, row: LlmSettingRow |
   else settings.set(featureKey, row);
 }
 
+export function readCachedApiKey(id: string) {
+  return apiKeys.get(id) || null;
+}
+
+export function listCachedApiKeys() {
+  return [...apiKeys.values()];
+}
+
+function settingHasOverride(row: LlmSettingRow | null) {
+  if (!row) return false;
+  return Boolean(
+    row.displayName ||
+      row.provider ||
+      row.model ||
+      row.apiKeyId ||
+      row.systemPrompt ||
+      row.fastMode != null ||
+      row.reasoningEffort ||
+      row.maxTokens != null
+  );
+}
+
+async function mergeLegacyFormFill() {
+  const cursor = settings.get("form_fill_cursor");
+  if (!cursor) return;
+  if (!settingHasOverride(settings.get("form_fill") || null) && settingHasOverride(cursor)) {
+    const saved = await upsertLlmSetting({ ...cursor, featureKey: "form_fill" });
+    settings.set("form_fill", saved);
+  }
+  await deleteLlmSetting("form_fill_cursor");
+  settings.delete("form_fill_cursor");
+}
+
 async function pullSettings() {
-  const rows = await listLlmSettings();
+  await migrateInlineApiKeys();
+  const [rows, keys] = await Promise.all([listLlmSettings(), listLlmApiKeys()]);
   settings = new Map(rows.map((row) => [row.featureKey, row]));
+  apiKeys = new Map(keys.map((key) => [key.id, key]));
+  await mergeLegacyFormFill();
   ready = true;
   retryAfter = 0;
 }
@@ -120,7 +165,8 @@ export async function resolveLlmFeature(featureKey: string, defaultPrompt: strin
   const row = settings.get(featureKey) || null;
   const provider = row?.provider || defaultProviderFor(feature);
   const model = row?.model || defaultModelFor(feature, provider);
-  const savedKey = row?.apiKey || "";
+  const linked = row?.apiKeyId ? apiKeys.get(row.apiKeyId) : null;
+  const savedKey = linked && linked.provider === provider ? linked.apiKey : "";
   const apiKey = savedKey || environmentApiKey(provider);
   const customPrompt = row?.systemPrompt?.trim() ? row.systemPrompt : "";
 

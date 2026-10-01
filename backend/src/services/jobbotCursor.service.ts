@@ -174,7 +174,7 @@ export async function runCursorTextPrompt(prompt) {
  * @returns {Promise<{answers:object[], timing: object}>}
  */
 export async function fillFormFields(pageHtml, profile, meta, options: any = {}) {
-  const cfg = await resolveLlmFeature("form_fill_cursor", INSTRUCTIONS);
+  const cfg = await resolveLlmFeature("form_fill", INSTRUCTIONS);
   const apiKey = cfg.apiKey.trim();
   if (!apiKey) {
     throw new Error("CURSOR_API_KEY is not set");

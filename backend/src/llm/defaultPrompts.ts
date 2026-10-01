@@ -9,7 +9,6 @@ import { REALTIME_INSTRUCTION_TEMPLATE } from "../services/openaiRealtime.servic
 
 const PROMPTS: Record<string, string> = {
   form_fill: INSTRUCTIONS,
-  form_fill_cursor: INSTRUCTIONS,
   job_extract: JOB_EXTRACT_PROMPT,
   job_summary: JOB_SUMMARY_PROMPT,
   resume_prefill: RESUME_PREFILL_PROMPT,

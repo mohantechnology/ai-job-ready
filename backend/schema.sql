@@ -372,12 +372,34 @@ CREATE INDEX IF NOT EXISTS idx_llm_usage_events_user_created
   ON llm_usage_events (user_id, created_at DESC);
 
 -- ============================================================
+-- llm_api_keys
+-- Named keys chosen from Manage models. A feature points at one row.
+-- Deleting a key clears that pointer so the feature falls back to the
+-- server environment key.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS llm_api_keys (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  label TEXT NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('openai', 'cursor')),
+  api_key TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+DROP TRIGGER IF EXISTS llm_api_keys_set_updated_at ON llm_api_keys;
+CREATE TRIGGER llm_api_keys_set_updated_at
+BEFORE UPDATE ON llm_api_keys
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ============================================================
 -- llm_feature_settings
 -- Per-feature overrides for the admin "Manage models" screen.
 -- A NULL column means "use the built-in default" (hardcoded prompt,
 -- env model, or env API key). The backend keeps these rows in memory
 -- and refreshes that cache on save, so a prompt change applies on the
 -- next LLM call without a process restart.
+-- api_key is leftover from when each feature stored its own secret.
+-- New saves use api_key_id and clear api_key.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS llm_feature_settings (
   feature_key TEXT PRIMARY KEY,
@@ -385,6 +407,7 @@ CREATE TABLE IF NOT EXISTS llm_feature_settings (
   provider TEXT CHECK (provider IS NULL OR provider IN ('openai', 'cursor')),
   model TEXT,
   api_key TEXT,
+  api_key_id UUID REFERENCES llm_api_keys(id) ON DELETE SET NULL,
   system_prompt TEXT,
   fast_mode BOOLEAN,
   reasoning_effort TEXT,
@@ -392,7 +415,130 @@ CREATE TABLE IF NOT EXISTS llm_feature_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE llm_feature_settings
+  ADD COLUMN IF NOT EXISTS api_key_id UUID REFERENCES llm_api_keys(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_llm_feature_settings_api_key_id
+  ON llm_feature_settings (api_key_id);
+
 DROP TRIGGER IF EXISTS llm_feature_settings_set_updated_at ON llm_feature_settings;
 CREATE TRIGGER llm_feature_settings_set_updated_at
 BEFORE UPDATE ON llm_feature_settings
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Move secrets that were stored on a feature into llm_api_keys.
+INSERT INTO llm_api_keys (label, provider, api_key)
+SELECT
+  'Migrated ' || grouped.feature_key,
+  grouped.provider,
+  grouped.api_key
+FROM (
+  SELECT DISTINCT ON (inferred.provider, inferred.api_key)
+    inferred.feature_key,
+    inferred.provider,
+    inferred.api_key
+  FROM (
+    SELECT
+      feature_key,
+      CASE
+        WHEN provider IN ('openai', 'cursor') THEN provider
+        WHEN feature_key = 'form_fill_cursor' THEN 'cursor'
+        ELSE 'openai'
+      END AS provider,
+      btrim(api_key) AS api_key
+    FROM llm_feature_settings
+    WHERE api_key IS NOT NULL
+      AND btrim(api_key) <> ''
+      AND api_key_id IS NULL
+  ) AS inferred
+  ORDER BY inferred.provider, inferred.api_key, inferred.feature_key
+) AS grouped
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM llm_api_keys existing
+  WHERE existing.provider = grouped.provider
+    AND existing.api_key = grouped.api_key
+);
+
+UPDATE llm_feature_settings AS settings
+SET api_key_id = keys.id
+FROM llm_api_keys AS keys
+WHERE settings.api_key_id IS NULL
+  AND settings.api_key IS NOT NULL
+  AND btrim(settings.api_key) <> ''
+  AND keys.api_key = btrim(settings.api_key)
+  AND keys.provider = CASE
+    WHEN settings.provider IN ('openai', 'cursor') THEN settings.provider
+    WHEN settings.feature_key = 'form_fill_cursor' THEN 'cursor'
+    ELSE 'openai'
+  END;
+
+UPDATE llm_feature_settings
+SET api_key = NULL
+WHERE api_key IS NOT NULL
+  AND api_key_id IS NOT NULL;
+
+-- One Form fill task. Keep form_fill when it already has an override.
+-- Otherwise copy the Cursor row onto it, then drop the duplicate.
+INSERT INTO llm_feature_settings (
+  feature_key, display_name, provider, model, api_key_id, system_prompt, fast_mode, reasoning_effort, max_tokens
+)
+SELECT
+  'form_fill',
+  display_name,
+  provider,
+  model,
+  api_key_id,
+  system_prompt,
+  fast_mode,
+  reasoning_effort,
+  max_tokens
+FROM llm_feature_settings
+WHERE feature_key = 'form_fill_cursor'
+  AND NOT EXISTS (SELECT 1 FROM llm_feature_settings WHERE feature_key = 'form_fill')
+  AND (
+    display_name IS NOT NULL
+    OR provider IS NOT NULL
+    OR model IS NOT NULL
+    OR api_key_id IS NOT NULL
+    OR system_prompt IS NOT NULL
+    OR fast_mode IS NOT NULL
+    OR reasoning_effort IS NOT NULL
+    OR max_tokens IS NOT NULL
+  );
+
+UPDATE llm_feature_settings AS target
+SET
+  display_name = source.display_name,
+  provider = source.provider,
+  model = source.model,
+  api_key_id = source.api_key_id,
+  system_prompt = source.system_prompt,
+  fast_mode = source.fast_mode,
+  reasoning_effort = source.reasoning_effort,
+  max_tokens = source.max_tokens,
+  api_key = NULL
+FROM llm_feature_settings AS source
+WHERE target.feature_key = 'form_fill'
+  AND source.feature_key = 'form_fill_cursor'
+  AND target.display_name IS NULL
+  AND target.provider IS NULL
+  AND target.model IS NULL
+  AND target.api_key_id IS NULL
+  AND (target.api_key IS NULL OR btrim(target.api_key) = '')
+  AND target.system_prompt IS NULL
+  AND target.fast_mode IS NULL
+  AND target.reasoning_effort IS NULL
+  AND target.max_tokens IS NULL
+  AND (
+    source.display_name IS NOT NULL
+    OR source.provider IS NOT NULL
+    OR source.model IS NOT NULL
+    OR source.api_key_id IS NOT NULL
+    OR source.system_prompt IS NOT NULL
+    OR source.fast_mode IS NOT NULL
+    OR source.reasoning_effort IS NOT NULL
+    OR source.max_tokens IS NOT NULL
+  );
+
+DELETE FROM llm_feature_settings WHERE feature_key = 'form_fill_cursor';
