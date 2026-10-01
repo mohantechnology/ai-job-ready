@@ -7,6 +7,7 @@ import morgan from "morgan";
 import { AppModule } from "./app.module";
 import { env } from "./config/env";
 import { pool } from "./database/pool";
+import { ensureLlmConfigLoaded } from "./llm/llmConfig.store";
 import { ApiExceptionFilter } from "./common/filters/api-exception.filter";
 
 async function bootstrap() {
@@ -38,6 +39,7 @@ async function bootstrap() {
 
   await app.listen(env.port, "0.0.0.0");
   console.log(`Voice interviewer backend listening on http://localhost:${env.port}`);
+  ensureLlmConfigLoaded().catch(() => {});
 }
 
 bootstrap();

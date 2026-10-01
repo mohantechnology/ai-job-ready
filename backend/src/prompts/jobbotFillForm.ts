@@ -213,7 +213,7 @@ export function promptCacheKey(userDetails, profile) {
   return `jobbot:fill:v2:${digest}`;
 }
 
-export function buildFillMessages(userDetails, profile, meta, pageContent, pageFormat = "html") {
+export function buildFillMessages(userDetails, profile, meta, pageContent, pageFormat = "html", instructions = INSTRUCTIONS) {
   const candidateProfile = [
     "Structured candidate profile. `details` is the canonical profile; `newDetails` are facts the candidate later confirmed on real forms (prefer newDetails on overlap):",
     serializeUserDetailsForPrompt(userDetails),
@@ -243,7 +243,7 @@ export function buildFillMessages(userDetails, profile, meta, pageContent, pageF
   ].join("\n");
 
   return [
-    { role: "system", content: INSTRUCTIONS },
+    { role: "system", content: instructions || INSTRUCTIONS },
     { role: "user", content: candidateProfile },
     { role: "user", content: pageBlock }
   ];
@@ -319,7 +319,8 @@ export async function prepareFillRequest(pageHtml, profile, meta, options: any =
     profile,
     meta,
     truncatedHtml,
-    pageFormat
+    pageFormat,
+    options.systemPrompt
   );
   const cacheKey = promptCacheKey(userDetails, profile);
 

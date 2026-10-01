@@ -1,4 +1,4 @@
-import { env } from "../config/env";
+import { applyOpenAiChatOptions, applyOpenAiResponsesOptions, resolveLlmFeature } from "../llm/llmConfig.store";
 import { errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 
 const RESPONSES_URL = "https://api.openai.com/v1/responses";
@@ -9,7 +9,7 @@ const SEARCH_TIMEOUT_MS = 45_000;
 const WIKI_TIMEOUT_MS = 8_000;
 const MAX_RESEARCH_CHARS = 4000;
 
-const BRIEF_RULES = `Search the public web for this employer and this role, then write a research brief a mock interviewer can use.
+export const BRIEF_RULES = `Search the public web for this employer and this role, then write a research brief a mock interviewer can use.
 
 Rules:
 - Search for the company, and for this specific posting when it is public.
@@ -123,14 +123,14 @@ function textFromResponsesPayload(data) {
   return chunks.join("\n\n").trim();
 }
 
-async function requestResponses(body) {
-  if (!env.openaiApiKey) {
+async function requestResponses(body, apiKey) {
+  if (!apiKey) {
     throw new Error("Web research is not configured on the server.");
   }
   const response = await fetch(RESPONSES_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.openaiApiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
@@ -154,12 +154,12 @@ async function requestResponses(body) {
   return data;
 }
 
-function researchTrack(job, userId) {
+function researchTrack(job, userId, cfg) {
   return {
     userId,
     provider: "openai" as const,
     apiKeyProvider: "openai" as const,
-    model: env.openaiChatModel,
+    model: cfg.model,
     feature: "job_research",
     meta: job?.id ? { appliedJobId: job.id } : null,
   };
@@ -177,20 +177,23 @@ async function recordResearch(track, startedAt, status, extra: any = {}) {
   });
 }
 
-async function researchWithWebSearch(job, wiki, userId) {
-  const input = `${BRIEF_RULES}\n\nSaved job:\n${jobContext(job, wiki)}`;
+async function researchWithWebSearch(job, wiki, userId, cfg) {
+  const input = `${cfg.systemPrompt}\n\nSaved job:\n${jobContext(job, wiki)}`;
   const tools = [{ type: "web_search", search_context_size: "medium", external_web_access: true }];
-  const track = researchTrack(job, userId);
+  const track = researchTrack(job, userId, cfg);
+  const maxOutputTokens = cfg.maxTokens ?? 1200;
   let data;
   const startedAt = Date.now();
+  const searchBody: Record<string, unknown> = {
+    tools,
+    tool_choice: { type: "web_search" },
+    input,
+  };
+  applyOpenAiResponsesOptions(searchBody, cfg, maxOutputTokens);
+  const retryBody: Record<string, unknown> = { tools, input };
+  applyOpenAiResponsesOptions(retryBody, cfg, maxOutputTokens);
   try {
-    data = await requestResponses({
-      model: env.openaiChatModel,
-      tools,
-      tool_choice: { type: "web_search" },
-      max_output_tokens: 1200,
-      input,
-    });
+    data = await requestResponses(searchBody, cfg.apiKey);
   } catch (err) {
     await recordResearch(track, startedAt, statusFromError(err), {
       model: (err as any)?.model,
@@ -202,12 +205,7 @@ async function researchWithWebSearch(job, wiki, userId) {
     if ((err as any)?.status && (err as any).status < 500) {
       const retryStarted = Date.now();
       try {
-        data = await requestResponses({
-          model: env.openaiChatModel,
-          tools,
-          max_output_tokens: 1200,
-          input,
-        });
+        data = await requestResponses(retryBody, cfg.apiKey);
         const retryText = textFromResponsesPayload(data);
         const retryBrief = plainTextBrief(retryText);
         if (!retryBrief) {
@@ -256,29 +254,32 @@ async function researchWithWebSearch(job, wiki, userId) {
   return clip(brief, MAX_RESEARCH_CHARS);
 }
 
-async function synthesizeFromNotes(job, wiki, userId) {
+async function synthesizeFromNotes(job, wiki, userId, cfg) {
   const startedAt = Date.now();
-  const track = researchTrack(job, userId);
+  const track = researchTrack(job, userId, cfg);
+  if (!cfg.apiKey) {
+    throw new Error("Web research is not configured on the server.");
+  }
+  const body: Record<string, unknown> = {
+    messages: [
+      {
+        role: "system",
+        content: `${cfg.systemPrompt}\nLive web search was unavailable. Use only the Wikipedia note and the saved posting. If Wikipedia is missing or is a different organization, say public sources were thin.`,
+      },
+      { role: "user", content: jobContext(job, wiki) },
+    ],
+  };
+  applyOpenAiChatOptions(body, { ...cfg, maxTokens: cfg.maxTokens ?? 900 });
   let response;
   try {
     response = await fetch(CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.openaiApiKey}`,
+      Authorization: `Bearer ${cfg.apiKey}`,
       "Content-Type": "application/json",
     },
     signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
-    body: JSON.stringify({
-      model: env.openaiChatModel,
-      max_completion_tokens: 900,
-      messages: [
-        {
-          role: "system",
-          content: `${BRIEF_RULES}\nLive web search was unavailable. Use only the Wikipedia note and the saved posting. If Wikipedia is missing or is a different organization, say public sources were thin.`,
-        },
-        { role: "user", content: jobContext(job, wiki) },
-      ],
-    }),
+    body: JSON.stringify(body),
   });
   } catch (err) {
     await recordResearch(track, startedAt, statusFromError(err), { errorMessage: errorText(err) });
@@ -312,18 +313,19 @@ async function synthesizeFromNotes(job, wiki, userId) {
 }
 
 export async function researchJobAndCompany(job, userId) {
+  const cfg = await resolveLlmFeature("job_research", BRIEF_RULES);
   const wiki = await wikipediaMatch(job?.company).catch((err) => {
     console.error("job research wikipedia failed:", err instanceof Error ? err.message : err);
     return "";
   });
 
   try {
-    return await researchWithWebSearch(job, wiki, userId);
+    return await researchWithWebSearch(job, wiki, userId, cfg);
   } catch (err) {
     console.error("job research web search failed:", err instanceof Error ? err.message : err);
     if (!wiki) {
       throw new Error("Could not look up this company on the web. Try again, or continue without research.");
     }
-    return synthesizeFromNotes(job, wiki, userId);
+    return synthesizeFromNotes(job, wiki, userId, cfg);
   }
 }

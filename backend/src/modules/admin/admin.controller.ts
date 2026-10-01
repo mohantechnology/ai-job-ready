@@ -6,6 +6,7 @@ import type { AuthUser } from "../../common/auth/auth-user";
 import { ApiError } from "../../common/errors/api-error";
 import { findUserByEmail, findUserById } from "../../repositories/user.repository";
 import { deleteAdminUser, getAdminStats, listAdminUsers, updateAdminUser } from "../../repositories/admin.repository";
+import { listManagedModels, updateManagedModel } from "../../llm/llmConfigAdmin.service";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -94,5 +95,15 @@ export class AdminController {
       throw new ApiError(404, "User not found");
     }
     return { ok: true };
+  }
+
+  @Get("models")
+  async models() {
+    return listManagedModels();
+  }
+
+  @Patch("models/:featureKey")
+  async updateModel(@Param("featureKey") featureKey: string, @Body() body: Record<string, unknown>) {
+    return updateManagedModel(featureKey, body || {});
   }
 }

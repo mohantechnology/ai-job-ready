@@ -1,4 +1,6 @@
-import { env } from "../config/env";
+import { applyOpenAiChatOptions, resolveLlmFeature } from "../llm/llmConfig.store";
+import { parseLlmJson } from "../prompts/jobbotFillForm";
+import { runCursorTextPromptDetailed } from "./jobbotCursor.service";
 import { errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 
 const CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
@@ -14,7 +16,7 @@ function formatQuestionList(questions) {
   return questions.map((q) => `${q.id}: ${q.questionText}`).join("\n");
 }
 
-const GRADING_SYSTEM_PROMPT = [
+export const GRADING_SYSTEM_PROMPT = [
   "You are an expert technical interview grader.",
   "You will be given the full transcript of a mock interview (interviewer questions and candidate answers), the",
   "role, interview type, and topics that were meant to be covered, and the list of planned questions that were",
@@ -40,8 +42,11 @@ const GRADING_SYSTEM_PROMPT = [
 ].join("\n");
 
 export async function generateInterviewSummary(interview, questions = []) {
-  if (!env.openaiApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured on the server.");
+  const cfg = await resolveLlmFeature("interview_grading", GRADING_SYSTEM_PROMPT);
+  if (!cfg.apiKey) {
+    throw new Error(
+      cfg.provider === "cursor" ? "CURSOR_API_KEY is not set" : "OPENAI_API_KEY is not configured on the server."
+    );
   }
 
   const transcriptText = formatTranscript(interview.transcript || []);
@@ -68,46 +73,59 @@ export async function generateInterviewSummary(interview, questions = []) {
   const startedAt = Date.now();
   const track = {
     userId: interview.userId,
-    provider: "openai" as const,
-    apiKeyProvider: "openai" as const,
-    model: env.openaiChatModel,
+    provider: cfg.provider,
+    apiKeyProvider: cfg.provider,
+    model: cfg.model,
     feature: "interview_grading",
     meta: interview.id ? { interviewId: interview.id } : null,
   };
 
   let data: any = null;
   try {
-    const response = await fetch(CHAT_COMPLETIONS_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.openaiApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: env.openaiChatModel,
+    let content = "";
+    if (cfg.provider === "cursor") {
+      const cursorPrompt = `${cfg.systemPrompt}\n\n${userPrompt}\n\nReply with a single JSON object only. No markdown fences, no commentary.`;
+      const result = await runCursorTextPromptDetailed(cursorPrompt, { apiKey: cfg.apiKey, model: cfg.model });
+      content = result.text;
+      data = { usage: result.usage, model: result.model || cfg.model, service_tier: null };
+    } else {
+      const body: Record<string, unknown> = {
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: GRADING_SYSTEM_PROMPT },
+          { role: "system", content: cfg.systemPrompt },
           { role: "user", content: userPrompt },
         ],
-      }),
-    });
+      };
+      applyOpenAiChatOptions(body, cfg);
+      const response = await fetch(CHAT_COMPLETIONS_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${cfg.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Failed to grade interview (${response.status}): ${errorBody}`);
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`Failed to grade interview (${response.status}): ${errorBody}`);
+      }
+
+      data = await response.json();
+      content = data?.choices?.[0]?.message?.content;
     }
 
-    data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
     if (!content) {
       throw new Error("Grading response did not include content.");
     }
 
-    const parsed = JSON.parse(content);
+    const parsed = cfg.provider === "cursor" ? parseLlmJson(content) : JSON.parse(content);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || (cfg.provider === "cursor" && parsed.overallScore == null && !Array.isArray(parsed.questionResults))) {
+      throw new Error("Grading response was not valid JSON.");
+    }
     await recordLlmUsage({
       ...track,
-      model: data?.model || env.openaiChatModel,
+      model: data?.model || cfg.model,
       status: "success",
       serviceTier: data?.service_tier || null,
       usage: data?.usage,
@@ -124,7 +142,7 @@ export async function generateInterviewSummary(interview, questions = []) {
   } catch (err) {
     await recordLlmUsage({
       ...track,
-      model: data?.model || env.openaiChatModel,
+      model: data?.model || cfg.model,
       status: statusFromError(err),
       serviceTier: data?.service_tier || null,
       usage: data?.usage,

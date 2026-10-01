@@ -217,6 +217,17 @@ export function deleteAdminUser(id) {
   return request(`/admin/users/${id}`, { method: "DELETE" });
 }
 
+export function listManagedModels() {
+  return request("/admin/models");
+}
+
+export function updateManagedModel(featureKey, payload) {
+  return request(`/admin/models/${featureKey}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getLatestResume() {
   return request("/interviews/resume/latest");
 }

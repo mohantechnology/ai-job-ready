@@ -1,10 +1,12 @@
-import { env } from "../config/env";
+import { applyOpenAiChatOptions, resolveLlmFeature } from "../llm/llmConfig.store";
+import { parseLlmJson } from "../prompts/jobbotFillForm";
 import { getConceptStatsForUser } from "../repositories/taxonomy.repository";
+import { runCursorTextPromptDetailed } from "./jobbotCursor.service";
 import { errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 
 const CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
 
-const SYSTEM_PROMPT = `You are an expert technical interviewer who designs mock interview question sets.
+export const SYSTEM_PROMPT = `You are an expert technical interviewer who designs mock interview question sets.
 Given a candidate's job title, target role, interview type, and topics, produce a numbered list of interview questions.
 Respond ONLY with a single JSON object, no prose, matching exactly this shape:
 { "questions": [{ "question": "<question text>", "topic": "<one of the given topics that this question best belongs to>", "concept": "<short 1-3 word subtopic tag within that topic, e.g. 'event-loop', 'box-model', lowercase, no topic prefix>" }] }
@@ -30,8 +32,11 @@ export async function generateInterviewQuestions({
   additionalInfo,
   userId,
 }) {
-  if (!env.openaiApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured on the server.");
+  const cfg = await resolveLlmFeature("question_generation", SYSTEM_PROMPT);
+  if (!cfg.apiKey) {
+    throw new Error(
+      cfg.provider === "cursor" ? "CURSOR_API_KEY is not set" : "OPENAI_API_KEY is not configured on the server."
+    );
   }
 
   const conceptStats = userId ? await getConceptStatsForUser(userId, topics || []) : [];
@@ -57,60 +62,84 @@ export async function generateInterviewQuestions({
   const startedAt = Date.now();
   const track = {
     userId,
-    provider: "openai" as const,
-    apiKeyProvider: "openai" as const,
-    model: env.openaiChatModel,
+    provider: cfg.provider,
+    apiKeyProvider: cfg.provider,
+    model: cfg.model,
     feature: "question_generation",
   };
 
   try {
-    const response = await fetch(CHAT_COMPLETIONS_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.openaiApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: env.openaiChatModel,
+    let content = "";
+    let usage = null;
+    let model = cfg.model;
+    let serviceTier = null;
+
+    if (cfg.provider === "cursor") {
+      const cursorPrompt = `${cfg.systemPrompt}\n\n${userPrompt}\n\nReply with a single JSON object only. No markdown fences, no commentary.`;
+      const result = await runCursorTextPromptDetailed(cursorPrompt, { apiKey: cfg.apiKey, model: cfg.model });
+      content = result.text;
+      usage = result.usage;
+      model = result.model || cfg.model;
+    } else {
+      const body: Record<string, unknown> = {
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: cfg.systemPrompt },
           { role: "user", content: userPrompt },
         ],
-      }),
-    });
+      };
+      applyOpenAiChatOptions(body, cfg);
+      const response = await fetch(CHAT_COMPLETIONS_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${cfg.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Failed to generate interview questions (${response.status}): ${errorBody}`);
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`Failed to generate interview questions (${response.status}): ${errorBody}`);
+      }
+
+      const data = await response.json();
+      content = data?.choices?.[0]?.message?.content;
+      usage = data?.usage;
+      model = data?.model || cfg.model;
+      serviceTier = data?.service_tier || null;
+      if (!content) {
+        const error: any = new Error("Question generation response did not include content.");
+        error.usage = usage;
+        error.model = model;
+        throw error;
+      }
     }
 
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
     if (!content) {
-      const error: any = new Error("Question generation response did not include content.");
-      error.usage = data?.usage;
-      error.model = data?.model;
-      throw error;
+      throw new Error("Question generation response did not include content.");
     }
 
     let parsed;
     try {
-      parsed = JSON.parse(content);
+      parsed = cfg.provider === "cursor" ? parseLlmJson(content) : JSON.parse(content);
+      if (cfg.provider === "cursor" && !Array.isArray(parsed?.questions)) {
+        throw new Error("empty");
+      }
     } catch (err) {
       const error: any = new Error("Question generation response was not valid JSON.");
-      error.usage = data?.usage;
-      error.model = data?.model;
+      error.usage = usage;
+      error.model = model;
       error.cause = err;
       throw error;
     }
 
     await recordLlmUsage({
       ...track,
-      model: data?.model || env.openaiChatModel,
+      model,
       status: "success",
-      serviceTier: data?.service_tier || null,
-      usage: data?.usage,
+      serviceTier,
+      usage,
       durationMs: Date.now() - startedAt,
     });
 
@@ -119,7 +148,7 @@ export async function generateInterviewQuestions({
   } catch (err) {
     await recordLlmUsage({
       ...track,
-      model: (err as any)?.model || env.openaiChatModel,
+      model: (err as any)?.model || cfg.model,
       status: statusFromError(err),
       usage: (err as any)?.usage,
       durationMs: Date.now() - startedAt,

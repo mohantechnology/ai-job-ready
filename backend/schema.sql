@@ -370,3 +370,29 @@ CREATE TABLE IF NOT EXISTS llm_usage_events (
 
 CREATE INDEX IF NOT EXISTS idx_llm_usage_events_user_created
   ON llm_usage_events (user_id, created_at DESC);
+
+-- ============================================================
+-- llm_feature_settings
+-- Per-feature overrides for the admin "Manage models" screen.
+-- A NULL column means "use the built-in default" (hardcoded prompt,
+-- env model, or env API key). The backend keeps these rows in memory
+-- and refreshes that cache on save, so a prompt change applies on the
+-- next LLM call without a process restart.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS llm_feature_settings (
+  feature_key TEXT PRIMARY KEY,
+  display_name TEXT,
+  provider TEXT CHECK (provider IS NULL OR provider IN ('openai', 'cursor')),
+  model TEXT,
+  api_key TEXT,
+  system_prompt TEXT,
+  fast_mode BOOLEAN,
+  reasoning_effort TEXT,
+  max_tokens INTEGER,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+DROP TRIGGER IF EXISTS llm_feature_settings_set_updated_at ON llm_feature_settings;
+CREATE TRIGGER llm_feature_settings_set_updated_at
+BEFORE UPDATE ON llm_feature_settings
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();

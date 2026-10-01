@@ -8,6 +8,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Shield,
+  SlidersHorizontal,
   UserRound,
   Users,
   X,
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
 const ADMIN_NAV_ITEMS = [
   { to: "/admin", label: "Admin Dashboard", icon: LayoutDashboard, end: true },
   { to: "/admin/users", label: "Users", icon: Users },
+  { to: "/admin/models", label: "Manage models", icon: SlidersHorizontal },
 ];
 
 const APP_NAME = "JobReady";

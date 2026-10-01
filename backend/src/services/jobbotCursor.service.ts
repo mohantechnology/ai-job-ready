@@ -5,11 +5,13 @@ import { env } from "../config/env";
 import { writeDebugOutput } from "../lib/jobbotHtmlParser";
 import {
   FILL_LLM_TIMEOUT_MS,
+  INSTRUCTIONS,
   fillMessagesToPrompt,
   normalizeFillOutput,
   parseLlmJson,
   prepareFillRequest
 } from "../prompts/jobbotFillForm";
+import { resolveLlmFeature } from "../llm/llmConfig.store";
 import { cursorModelId, errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 
 // Ported from job-bot/backend/src/services/cursorService.js as part of
@@ -117,13 +119,16 @@ export type CursorTextResult = {
 
 // One-shot text prompt with tools disabled. Used by resume prefill,
 // job extract, and job summary. Returns token usage when Cursor sends it.
-export async function runCursorTextPromptDetailed(prompt): Promise<CursorTextResult> {
-  const apiKey = (process.env.CURSOR_API_KEY || env.cursorApiKey || "").trim();
+export async function runCursorTextPromptDetailed(
+  prompt,
+  options: { apiKey?: string; model?: string } = {}
+): Promise<CursorTextResult> {
+  const apiKey = (options.apiKey || process.env.CURSOR_API_KEY || env.cursorApiKey || "").trim();
   if (!apiKey) {
     throw new Error("CURSOR_API_KEY is not set");
   }
 
-  const modelId = process.env.CURSOR_MODEL || env.cursorModel || "composer-2.5";
+  const modelId = (options.model || process.env.CURSOR_MODEL || env.cursorModel || "composer-2.5").trim();
   const { Agent, store } = await getCursorSdk();
   const agent = await Agent.create(cursorAgentOptions(apiKey, modelId, store));
   const startedAt = Date.now();
@@ -169,14 +174,18 @@ export async function runCursorTextPrompt(prompt) {
  * @returns {Promise<{answers:object[], timing: object}>}
  */
 export async function fillFormFields(pageHtml, profile, meta, options: any = {}) {
-  const apiKey = (process.env.CURSOR_API_KEY || "").trim();
+  const cfg = await resolveLlmFeature("form_fill_cursor", INSTRUCTIONS);
+  const apiKey = cfg.apiKey.trim();
   if (!apiKey) {
     throw new Error("CURSOR_API_KEY is not set");
   }
 
-  const { messages } = await prepareFillRequest(pageHtml, profile, meta, options);
+  const { messages } = await prepareFillRequest(pageHtml, profile, meta, {
+    ...options,
+    systemPrompt: cfg.systemPrompt,
+  });
   const prompt = fillMessagesToPrompt(messages);
-  const modelId = process.env.CURSOR_MODEL || "composer-2.5";
+  const modelId = cfg.model;
 
   const onDelta = typeof options.onDelta === "function" ? options.onDelta : null;
   const { Agent, store } = await getCursorSdk();

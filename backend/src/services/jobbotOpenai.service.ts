@@ -3,10 +3,12 @@ import { writeDebugOutput } from "../lib/jobbotHtmlParser";
 import {
   FILL_LLM_TIMEOUT_MS,
   FILL_RESPONSE_SCHEMA,
+  INSTRUCTIONS,
   normalizeFillOutput,
   parseLlmJson,
   prepareFillRequest
 } from "../prompts/jobbotFillForm";
+import { resolveLlmFeature } from "../llm/llmConfig.store";
 import { errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 
 // Ported from job-bot/backend/src/services/openaiService.js as part of
@@ -14,36 +16,37 @@ import { errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 // output only" merge decision, the non-streaming branch was dropped -
 // `fillFormFields` always streams now.
 
-let client;
-function getClient() {
-  // Lazy-init so a missing key fails per-request (caught by the route
-  // handler) instead of crashing the whole server at startup.
-  if (!client) {
-    client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "missing-key" });
-  }
-  return client;
+const clients = new Map<string, OpenAI>();
+function getClient(apiKey: string) {
+  const existing = clients.get(apiKey);
+  if (existing) return existing;
+  const created = new OpenAI({ apiKey });
+  clients.set(apiKey, created);
+  return created;
 }
 
-function openaiRequestBody(messages, cacheKey) {
-  return {
-    model: "gpt-5-nano", // gpt-5-nano gpt-4.1-nano gpt-4o-mini
+function openaiRequestBody(messages, cacheKey, cfg) {
+  const body = {
+    model: cfg.model,
     messages,
     // Routes repeats of this profile to the same cache machine so the
     // system + candidate-profile prefix can be reused across fills.
     prompt_cache_key: cacheKey,
     response_format: {
-      type: "json_schema",
+      type: "json_schema" as const,
       json_schema: {
         name: "job_application_fill",
         strict: true,
         schema: FILL_RESPONSE_SCHEMA
       }
     },
-    service_tier: "fast",
-    max_completion_tokens: 20000,
-    stream: true,
-    stream_options: { include_usage: true }
+    stream: true as const,
+    stream_options: { include_usage: true as const },
+    ...(cfg.maxTokens != null ? { max_completion_tokens: cfg.maxTokens } : {}),
+    ...(cfg.fastMode ? { service_tier: "fast" as "default" } : {}),
   };
+  if (cfg.reasoningEffort) (body as any).reasoning_effort = cfg.reasoningEffort;
+  return body;
 }
 
 function completionRequestOptions(signal) {
@@ -91,16 +94,23 @@ async function dumpOpenAI({ messages, parsed, extra }) {
  * @returns {Promise<{answers:object[], timing: object}>}
  */
 export async function fillFormFields(pageHtml, profile, meta, options: any = {}) {
-  const { messages, cacheKey } = await prepareFillRequest(pageHtml, profile, meta, options);
+  const cfg = await resolveLlmFeature("form_fill", INSTRUCTIONS);
+  if (!cfg.apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured on the server.");
+  }
+  const { messages, cacheKey } = await prepareFillRequest(pageHtml, profile, meta, {
+    ...options,
+    systemPrompt: cfg.systemPrompt,
+  });
   const onDelta = typeof options.onDelta === "function" ? options.onDelta : null;
-  const body = openaiRequestBody(messages, cacheKey);
+  const body = openaiRequestBody(messages, cacheKey, cfg);
   const track = {
     userId: options.userId,
     provider: "openai" as const,
     apiKeyProvider: "openai" as const,
-    model: body.model,
+    model: cfg.model,
     feature: "form_fill",
-    serviceTier: "fast",
+    serviceTier: cfg.fastMode ? "fast" : null,
   };
 
   const llmStartedAt = Date.now();
@@ -109,7 +119,7 @@ export async function fillFormFields(pageHtml, profile, meta, options: any = {})
   let usage = null;
 
   try {
-    const completion = await getClient().chat.completions.create(
+    const completion = await getClient(cfg.apiKey).chat.completions.create(
       body,
       completionRequestOptions(options.signal)
     );
