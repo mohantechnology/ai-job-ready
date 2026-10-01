@@ -87,7 +87,7 @@ export class ProfileController {
 
   @Post("profile-from-resume")
   @HttpCode(200)
-  async prefillFromResume(@Body() body: { resumeText?: unknown }) {
+  async prefillFromResume(@CurrentUser() user: AuthUser, @Body() body: { resumeText?: unknown }) {
     const resumeText = typeof body?.resumeText === "string" ? body.resumeText.trim() : "";
     if (!resumeText) {
       throw new ApiError(400, "Upload a resume before filling the form.");
@@ -97,7 +97,7 @@ export class ProfileController {
     }
 
     try {
-      const result = await extractProfileFromResume(resumeText);
+      const result = await extractProfileFromResume(resumeText, user.id);
       return { ok: true, values: result.values, filledCount: result.filledCount };
     } catch (err) {
       console.error("jobbot user/profile-from-resume failed:", err);

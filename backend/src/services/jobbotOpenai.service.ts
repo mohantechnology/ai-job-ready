@@ -7,6 +7,7 @@ import {
   parseLlmJson,
   prepareFillRequest
 } from "../prompts/jobbotFillForm";
+import { errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 
 // Ported from job-bot/backend/src/services/openaiService.js as part of
 // merging the job-bot extension's backend into this one. Per the "stream
@@ -92,43 +93,69 @@ async function dumpOpenAI({ messages, parsed, extra }) {
 export async function fillFormFields(pageHtml, profile, meta, options: any = {}) {
   const { messages, cacheKey } = await prepareFillRequest(pageHtml, profile, meta, options);
   const onDelta = typeof options.onDelta === "function" ? options.onDelta : null;
+  const body = openaiRequestBody(messages, cacheKey);
+  const track = {
+    userId: options.userId,
+    provider: "openai" as const,
+    apiKeyProvider: "openai" as const,
+    model: body.model,
+    feature: "form_fill",
+    serviceTier: "fast",
+  };
 
   const llmStartedAt = Date.now();
   let ttfbMs = null;
   let raw = "";
   let usage = null;
 
-  const completion = await getClient().chat.completions.create(
-    openaiRequestBody(messages, cacheKey),
-    completionRequestOptions(options.signal)
-  );
+  try {
+    const completion = await getClient().chat.completions.create(
+      body,
+      completionRequestOptions(options.signal)
+    );
 
-  for await (const chunk of completion) {
-    if (chunk?.usage) usage = chunk.usage;
-    const text = chunkDeltaText(chunk);
-    if (!text) continue;
-    if (ttfbMs == null) {
-      ttfbMs = Date.now() - llmStartedAt;
-      console.log(`[openai stream] first token ${ttfbMs}ms`);
+    for await (const chunk of completion) {
+      if (chunk?.usage) usage = chunk.usage;
+      const text = chunkDeltaText(chunk);
+      if (!text) continue;
+      if (ttfbMs == null) {
+        ttfbMs = Date.now() - llmStartedAt;
+        console.log(`[openai stream] first token ${ttfbMs}ms`);
+      }
+      raw += text;
+      onDelta?.({ text, elapsedMs: Date.now() - llmStartedAt });
     }
-    raw += text;
-    onDelta?.({ text, elapsedMs: Date.now() - llmStartedAt });
+
+    const totalMs = Date.now() - llmStartedAt;
+    const timing = { ttfbMs, totalMs, chars: raw.length };
+    console.log(
+      `[openai stream] done ttfb=${ttfbMs ?? "n/a"}ms total=${totalMs}ms chars=${raw.length}`
+    );
+
+    const parsed = parseLlmJson(raw || "{}");
+    await dumpOpenAI({
+      messages,
+      parsed,
+      extra: JSON.stringify({ stream: true, usage, timing, result: raw }, null, 2)
+    });
+    await recordLlmUsage({
+      ...track,
+      status: "success",
+      usage,
+      durationMs: totalMs,
+      ttfbMs,
+    });
+
+    return { ...normalizeFillOutput(parsed), timing };
+  } catch (err) {
+    await recordLlmUsage({
+      ...track,
+      status: statusFromError(err),
+      usage,
+      durationMs: Date.now() - llmStartedAt,
+      ttfbMs,
+      errorMessage: errorText(err),
+    });
+    throw err;
   }
-
-  const totalMs = Date.now() - llmStartedAt;
-  const timing = { ttfbMs, totalMs, chars: raw.length };
-  console.log(
-    `[openai stream] done ttfb=${ttfbMs ?? "n/a"}ms total=${totalMs}ms chars=${raw.length}`
-  );
-  console.log("openai usage -------------------");
-  console.log(usage ? JSON.stringify(usage) : "(none)");
-
-  const parsed = parseLlmJson(raw || "{}");
-  await dumpOpenAI({
-    messages,
-    parsed,
-    extra: JSON.stringify({ stream: true, usage, timing, result: raw }, null, 2)
-  });
-
-  return { ...normalizeFillOutput(parsed), timing };
 }

@@ -158,6 +158,46 @@ export function getDashboard(rangeOrOptions = "this_week") {
   return request(`/dashboard?${rangeQuery(rangeOrOptions)}`);
 }
 
+export function getUsage(rangeOrOptions = "this_month", page = {}) {
+  const params = rangeQuery(rangeOrOptions);
+  if (page.limit) params.set("limit", String(page.limit));
+  if (page.offset) params.set("offset", String(page.offset));
+  return request(`/usage?${params}`);
+}
+
+export function reportRealtimeUsage(payload) {
+  return request("/usage/events", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function downloadUsageCsv(rangeOrOptions = "this_month") {
+  const token = getToken();
+  const response = await fetch(`${BASE_URL}/usage/export?${rangeQuery(rangeOrOptions)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`;
+    try {
+      const body = await response.json();
+      message = body?.error?.message || body?.error || message;
+    } catch {
+      // The export response is CSV when it succeeds.
+    }
+    throw new Error(message);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "usage.csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function getAdminStats() {
   return request("/admin/stats");
 }

@@ -326,3 +326,47 @@ ALTER TABLE interviews
   ADD COLUMN IF NOT EXISTS applied_job_id UUID REFERENCES applied_jobs(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_interviews_applied_job_id ON interviews (applied_job_id);
+
+-- ============================================================
+-- llm_usage_events
+-- One row per LLM call made for an account (form fill, job extract,
+-- voice interview turns, and the rest). Token counts come from the
+-- provider response. Prompts and page HTML are not stored.
+-- api_key_provider records which API key served the call (cursor,
+-- openai, or other). It is for the admin panel and is not returned
+-- by the user usage API.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS llm_usage_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  provider TEXT NOT NULL CHECK (provider IN ('openai', 'cursor')),
+  api_key_provider TEXT NOT NULL CHECK (api_key_provider IN ('openai', 'cursor', 'other')),
+  model TEXT NOT NULL DEFAULT '',
+  feature TEXT NOT NULL CHECK (feature IN (
+    'form_fill',
+    'job_extract',
+    'job_summary',
+    'resume_prefill',
+    'job_research',
+    'question_generation',
+    'interview_grading',
+    'realtime_interview'
+  )),
+  status TEXT NOT NULL CHECK (status IN ('success', 'failed', 'cancelled')),
+  service_tier TEXT,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+  audio_input_tokens INTEGER NOT NULL DEFAULT 0,
+  audio_output_tokens INTEGER NOT NULL DEFAULT 0,
+  total_tokens INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER,
+  ttfb_ms INTEGER,
+  error_message TEXT,
+  meta JSONB NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_llm_usage_events_user_created
+  ON llm_usage_events (user_id, created_at DESC);

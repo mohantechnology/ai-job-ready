@@ -1,6 +1,7 @@
 import { existsSync } from "fs";
 import { createRequire } from "module";
 import path from "path";
+import { env } from "../config/env";
 import { writeDebugOutput } from "../lib/jobbotHtmlParser";
 import {
   FILL_LLM_TIMEOUT_MS,
@@ -9,6 +10,7 @@ import {
   parseLlmJson,
   prepareFillRequest
 } from "../prompts/jobbotFillForm";
+import { cursorModelId, errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 
 // Ported from job-bot/backend/src/services/cursorService.js as part of
 // merging the job-bot extension's backend into this one. Per the "stream
@@ -106,16 +108,25 @@ function cursorAgentOptions(apiKey, modelId, store) {
   };
 }
 
-// One-shot text prompt with tools disabled. Used by resume prefill.
-export async function runCursorTextPrompt(prompt) {
-  const apiKey = (process.env.CURSOR_API_KEY || "").trim();
+export type CursorTextResult = {
+  text: string;
+  usage: unknown;
+  model: string;
+  durationMs: number;
+};
+
+// One-shot text prompt with tools disabled. Used by resume prefill,
+// job extract, and job summary. Returns token usage when Cursor sends it.
+export async function runCursorTextPromptDetailed(prompt): Promise<CursorTextResult> {
+  const apiKey = (process.env.CURSOR_API_KEY || env.cursorApiKey || "").trim();
   if (!apiKey) {
     throw new Error("CURSOR_API_KEY is not set");
   }
 
-  const modelId = process.env.CURSOR_MODEL || "composer-2.5";
+  const modelId = process.env.CURSOR_MODEL || env.cursorModel || "composer-2.5";
   const { Agent, store } = await getCursorSdk();
   const agent = await Agent.create(cursorAgentOptions(apiKey, modelId, store));
+  const startedAt = Date.now();
 
   try {
     let streamed = "";
@@ -128,10 +139,20 @@ export async function runCursorTextPrompt(prompt) {
     });
     const result = await withTimeout(run.wait(), FILL_LLM_TIMEOUT_MS, "Cursor prompt");
     assertCursorResult(result);
-    return result?.result || streamed || "";
+    return {
+      text: result?.result || streamed || "",
+      usage: result?.usage ?? null,
+      model: cursorModelId(result, modelId),
+      durationMs: Number(result?.durationMs) || Date.now() - startedAt,
+    };
   } finally {
     await agent[Symbol.asyncDispose]();
   }
+}
+
+export async function runCursorTextPrompt(prompt) {
+  const result = await runCursorTextPromptDetailed(prompt);
+  return result.text;
 }
 
 /**
@@ -162,6 +183,13 @@ export async function fillFormFields(pageHtml, profile, meta, options: any = {})
   const setupStartedAt = Date.now();
   const agent = await Agent.create(cursorAgentOptions(apiKey, modelId, store));
   const setupMs = Date.now() - setupStartedAt;
+  const track = {
+    userId: options.userId,
+    provider: "cursor" as const,
+    apiKeyProvider: "cursor" as const,
+    feature: "form_fill",
+    model: modelId,
+  };
 
   let run;
   const onAbort = () => {
@@ -170,14 +198,23 @@ export async function fillFormFields(pageHtml, profile, meta, options: any = {})
   if (options.signal) {
     if (options.signal.aborted) {
       await agent[Symbol.asyncDispose]();
+      await recordLlmUsage({
+        ...track,
+        status: "cancelled",
+        durationMs: Date.now() - setupStartedAt,
+        errorMessage: "Cursor fill was aborted",
+      });
       throw new Error("Cursor fill was aborted");
     }
     options.signal.addEventListener("abort", onAbort, { once: true });
   }
 
+  const llmStartedAt = Date.now();
+  let usage = null;
+  let model = modelId;
+  let ttfbMs = null;
+  let durationMs = null;
   try {
-    const llmStartedAt = Date.now();
-    let ttfbMs = null;
     let streamed = "";
     let thinking = "";
 
@@ -205,6 +242,9 @@ export async function fillFormFields(pageHtml, profile, meta, options: any = {})
 
     const result = await withTimeout(run.wait(), FILL_LLM_TIMEOUT_MS, "Cursor fill");
     const totalMs = Date.now() - llmStartedAt;
+    durationMs = totalMs;
+    usage = result?.usage ?? null;
+    model = cursorModelId(result, modelId);
 
     assertCursorResult(result);
 
@@ -221,10 +261,29 @@ export async function fillFormFields(pageHtml, profile, meta, options: any = {})
 
     const parsed = parseLlmJson(raw);
     await dumpCursorFill({ messages, prompt, result, raw, parsed, thinking });
+    await recordLlmUsage({
+      ...track,
+      model,
+      status: "success",
+      usage,
+      durationMs: totalMs,
+      ttfbMs,
+    });
     return {
       ...normalizeFillOutput(parsed),
       timing: { ttfbMs, totalMs, setupMs, chars: raw.length }
     };
+  } catch (err) {
+    await recordLlmUsage({
+      ...track,
+      model,
+      status: statusFromError(err),
+      usage,
+      durationMs: durationMs ?? Date.now() - llmStartedAt,
+      ttfbMs,
+      errorMessage: errorText(err),
+    });
+    throw err;
   } finally {
     options.signal?.removeEventListener("abort", onAbort);
     await agent[Symbol.asyncDispose]();

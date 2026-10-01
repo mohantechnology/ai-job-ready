@@ -5,7 +5,8 @@ import { env } from "../config/env";
 import { OUTPUT_DIR, parsePageHtml } from "../lib/jobbotHtmlParser";
 import { buildPageFormatVariants } from "../lib/jobbotHtmlToPageText";
 import { FILL_LLM_TIMEOUT_MS, MAX_PAGE_HTML_CHARS, parseLlmJson } from "../prompts/jobbotFillForm";
-import { runCursorTextPrompt } from "./jobbotCursor.service";
+import { runCursorTextPromptDetailed } from "./jobbotCursor.service";
+import { errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 
 const CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
 const STORED_HTML_CHARS = 200_000;
@@ -138,6 +139,7 @@ async function logExtractExchange(provider, input, output) {
 }
 
 async function requestOpenAI(userPrompt) {
+  const startedAt = Date.now();
   if (!env.openaiApiKey) {
     throw new Error("Job extraction with OpenAI is not configured on the server.");
   }
@@ -169,12 +171,21 @@ async function requestOpenAI(userPrompt) {
   const data = await response.json();
   const content = data?.choices?.[0]?.message?.content;
   if (!content) {
-    throw new Error("Could not read this job page right now. Try again in a moment.");
+    const error: any = new Error("Could not read this job page right now. Try again in a moment.");
+    error.usage = data?.usage;
+    error.model = data?.model;
+    throw error;
   }
-  return content;
+  return {
+    content,
+    usage: data?.usage ?? null,
+    model: data?.model || env.openaiChatModel,
+    serviceTier: data?.service_tier || null,
+    durationMs: Date.now() - startedAt,
+  };
 }
 
-export async function extractJobFromPage(pageHtml, meta) {
+export async function extractJobFromPage(pageHtml, meta, userId) {
   const html = String(pageHtml || "");
   if (html.trim().length < 40) {
     throw new Error("This page does not have enough content to save as a job.");
@@ -204,10 +215,30 @@ export async function extractJobFromPage(pageHtml, meta) {
   const cursorPrompt = `${SYSTEM_PROMPT}\n\n${userPrompt}\n\nReply with a single JSON object only. No markdown fences, no commentary.`;
   const inputLog = [`provider: ${provider}`, "", userPrompt].join("\n");
 
+  const startedAt = Date.now();
+  const modelFallback = provider === "openai" ? env.openaiChatModel : env.cursorModel;
+  let captured: any = null;
   let content = "";
   try {
-    content = provider === "openai" ? await requestOpenAI(userPrompt) : await runCursorTextPrompt(cursorPrompt);
+    if (provider === "openai") {
+      captured = await requestOpenAI(userPrompt);
+      content = captured.content;
+    } else {
+      captured = await runCursorTextPromptDetailed(cursorPrompt);
+      content = captured.text;
+    }
   } catch (err) {
+    await recordLlmUsage({
+      userId,
+      provider,
+      apiKeyProvider: provider,
+      model: (err as any)?.model || modelFallback,
+      feature: "job_extract",
+      status: statusFromError(err),
+      usage: (err as any)?.usage,
+      durationMs: Date.now() - startedAt,
+      errorMessage: errorText(err),
+    });
     await logExtractExchange(provider, inputLog, err instanceof Error ? err.message : String(err)).catch(() => {});
     throw err;
   }
@@ -216,8 +247,32 @@ export async function extractJobFromPage(pageHtml, meta) {
 
   const parsed = parseLlmJson(content);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    await recordLlmUsage({
+      userId,
+      provider,
+      apiKeyProvider: provider,
+      model: captured?.model || modelFallback,
+      feature: "job_extract",
+      status: "failed",
+      serviceTier: captured?.serviceTier,
+      usage: captured?.usage,
+      durationMs: captured?.durationMs ?? Date.now() - startedAt,
+      errorMessage: "Could not read this job page right now. Try again in a moment.",
+    });
     throw new Error("Could not read this job page right now. Try again in a moment.");
   }
+
+  await recordLlmUsage({
+    userId,
+    provider,
+    apiKeyProvider: provider,
+    model: captured?.model || modelFallback,
+    feature: "job_extract",
+    status: "success",
+    serviceTier: captured?.serviceTier,
+    usage: captured?.usage,
+    durationMs: captured?.durationMs ?? Date.now() - startedAt,
+  });
 
   const job = sanitizeJobExtraction(parsed.job && typeof parsed.job === "object" ? parsed.job : parsed, pageMeta);
   return { job, pageHtml: storedHtml, provider };

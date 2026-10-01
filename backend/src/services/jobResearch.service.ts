@@ -1,4 +1,5 @@
 import { env } from "../config/env";
+import { errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 
 const RESPONSES_URL = "https://api.openai.com/v1/responses";
 const CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
@@ -146,15 +147,42 @@ async function requestResponses(body) {
     const message = data?.error?.message || raw.slice(0, 300) || `Web search failed (${response.status})`;
     const error: any = new Error(message);
     error.status = response.status;
+    error.usage = data?.usage;
+    error.model = data?.model || body?.model;
     throw error;
   }
   return data;
 }
 
-async function researchWithWebSearch(job, wiki) {
+function researchTrack(job, userId) {
+  return {
+    userId,
+    provider: "openai" as const,
+    apiKeyProvider: "openai" as const,
+    model: env.openaiChatModel,
+    feature: "job_research",
+    meta: job?.id ? { appliedJobId: job.id } : null,
+  };
+}
+
+async function recordResearch(track, startedAt, status, extra: any = {}) {
+  await recordLlmUsage({
+    ...track,
+    model: extra.model || track.model,
+    status,
+    serviceTier: extra.serviceTier || null,
+    usage: extra.usage,
+    durationMs: extra.durationMs ?? Date.now() - startedAt,
+    errorMessage: status === "success" ? null : extra.errorMessage,
+  });
+}
+
+async function researchWithWebSearch(job, wiki, userId) {
   const input = `${BRIEF_RULES}\n\nSaved job:\n${jobContext(job, wiki)}`;
   const tools = [{ type: "web_search", search_context_size: "medium", external_web_access: true }];
+  const track = researchTrack(job, userId);
   let data;
+  const startedAt = Date.now();
   try {
     data = await requestResponses({
       model: env.openaiChatModel,
@@ -164,29 +192,76 @@ async function researchWithWebSearch(job, wiki) {
       input,
     });
   } catch (err) {
+    await recordResearch(track, startedAt, statusFromError(err), {
+      model: (err as any)?.model,
+      usage: (err as any)?.usage,
+      errorMessage: errorText(err),
+    });
     // Some models reject a forced tool choice or an unknown field. Retry once
     // and let the model decide to search from the prompt.
-    if (err?.status && err.status < 500) {
-      data = await requestResponses({
-        model: env.openaiChatModel,
-        tools,
-        max_output_tokens: 1200,
-        input,
-      });
-    } else {
-      throw err;
+    if ((err as any)?.status && (err as any).status < 500) {
+      const retryStarted = Date.now();
+      try {
+        data = await requestResponses({
+          model: env.openaiChatModel,
+          tools,
+          max_output_tokens: 1200,
+          input,
+        });
+        const retryText = textFromResponsesPayload(data);
+        const retryBrief = plainTextBrief(retryText);
+        if (!retryBrief) {
+          await recordResearch(track, retryStarted, "failed", {
+            model: data?.model,
+            usage: data?.usage,
+            serviceTier: data?.service_tier,
+            errorMessage: "Web research returned an empty brief.",
+          });
+          throw new Error("Web research returned an empty brief.");
+        }
+        await recordResearch(track, retryStarted, "success", {
+          model: data?.model,
+          usage: data?.usage,
+          serviceTier: data?.service_tier,
+        });
+        return clip(retryBrief, MAX_RESEARCH_CHARS);
+      } catch (retryErr) {
+        if (retryErr instanceof Error && retryErr.message === "Web research returned an empty brief.") throw retryErr;
+        await recordResearch(track, retryStarted, statusFromError(retryErr), {
+          model: (retryErr as any)?.model,
+          usage: (retryErr as any)?.usage,
+          errorMessage: errorText(retryErr),
+        });
+        throw retryErr;
+      }
     }
+    throw err;
   }
   const text = textFromResponsesPayload(data);
   const brief = plainTextBrief(text);
   if (!brief) {
+    await recordResearch(track, startedAt, "failed", {
+      model: data?.model,
+      usage: data?.usage,
+      serviceTier: data?.service_tier,
+      errorMessage: "Web research returned an empty brief.",
+    });
     throw new Error("Web research returned an empty brief.");
   }
+  await recordResearch(track, startedAt, "success", {
+    model: data?.model,
+    usage: data?.usage,
+    serviceTier: data?.service_tier,
+  });
   return clip(brief, MAX_RESEARCH_CHARS);
 }
 
-async function synthesizeFromNotes(job, wiki) {
-  const response = await fetch(CHAT_COMPLETIONS_URL, {
+async function synthesizeFromNotes(job, wiki, userId) {
+  const startedAt = Date.now();
+  const track = researchTrack(job, userId);
+  let response;
+  try {
+    response = await fetch(CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.openaiApiKey}`,
@@ -205,31 +280,50 @@ async function synthesizeFromNotes(job, wiki) {
       ],
     }),
   });
+  } catch (err) {
+    await recordResearch(track, startedAt, statusFromError(err), { errorMessage: errorText(err) });
+    throw err;
+  }
   if (!response.ok) {
+    const errorBody = await response.text();
+    await recordResearch(track, startedAt, "failed", {
+      errorMessage: errorBody.slice(0, 300) || "Could not write a research brief from the sources we found.",
+    });
     throw new Error("Could not write a research brief from the sources we found.");
   }
   const data = await response.json();
   const text = data?.choices?.[0]?.message?.content;
   const brief = plainTextBrief(text);
   if (!brief) {
+    await recordResearch(track, startedAt, "failed", {
+      model: data?.model,
+      usage: data?.usage,
+      serviceTier: data?.service_tier,
+      errorMessage: "Could not write a research brief from the sources we found.",
+    });
     throw new Error("Could not write a research brief from the sources we found.");
   }
+  await recordResearch(track, startedAt, "success", {
+    model: data?.model,
+    usage: data?.usage,
+    serviceTier: data?.service_tier,
+  });
   return clip(brief, MAX_RESEARCH_CHARS);
 }
 
-export async function researchJobAndCompany(job) {
+export async function researchJobAndCompany(job, userId) {
   const wiki = await wikipediaMatch(job?.company).catch((err) => {
     console.error("job research wikipedia failed:", err instanceof Error ? err.message : err);
     return "";
   });
 
   try {
-    return await researchWithWebSearch(job, wiki);
+    return await researchWithWebSearch(job, wiki, userId);
   } catch (err) {
     console.error("job research web search failed:", err instanceof Error ? err.message : err);
     if (!wiki) {
       throw new Error("Could not look up this company on the web. Try again, or continue without research.");
     }
-    return synthesizeFromNotes(job, wiki);
+    return synthesizeFromNotes(job, wiki, userId);
   }
 }

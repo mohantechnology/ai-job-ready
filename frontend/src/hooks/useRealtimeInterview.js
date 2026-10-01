@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { createRealtimeToken, completeInterview, uploadWhiteboardSubmission } from "../lib/api.js";
+import { createRealtimeToken, completeInterview, reportRealtimeUsage, uploadWhiteboardSubmission } from "../lib/api.js";
 
 const REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls";
 const END_INTERVIEW_TOOL_NAME = "end_interview";
@@ -19,6 +19,25 @@ function makeId() {
 
 function micLog(...args) {
   console.log("[mic-interview]", ...args);
+}
+
+function reportRealtimeTurn(event, interviewId) {
+  const response = event?.response || {};
+  const rawStatus = typeof response.status === "string" ? response.status : "";
+  let status = "success";
+  if (event?.type === "response.cancelled" || rawStatus === "cancelled") status = "cancelled";
+  else if (event?.type === "response.failed" || rawStatus === "failed" || rawStatus === "incomplete") status = "failed";
+  const errorMessage = response.status_details?.error?.message || response.status_details?.reason || "";
+  reportRealtimeUsage({
+    model: typeof response.model === "string" ? response.model : undefined,
+    status,
+    usage: response.usage && typeof response.usage === "object" ? response.usage : null,
+    interviewId,
+    serviceTier: typeof response.service_tier === "string" ? response.service_tier : undefined,
+    errorMessage: typeof errorMessage === "string" ? errorMessage : "",
+  }).catch((err) => {
+    console.error("Failed to record realtime usage:", err);
+  });
 }
 
 export function useRealtimeInterview(interview) {
@@ -62,6 +81,8 @@ export function useRealtimeInterview(interview) {
   // silently swallowing the mic/response flow).
   const activeResponseRef = useRef(false);
   const responseRequestQueuedRef = useRef(false);
+  const interviewIdRef = useRef(interview?.id);
+  interviewIdRef.current = interview?.id;
 
   const updateSpeakingSide = useCallback((next) => {
     setSpeakingSide((prev) => {
@@ -284,6 +305,7 @@ export function useRealtimeInterview(interview) {
         case "response.done":
         case "response.cancelled":
         case "response.failed":
+          reportRealtimeTurn(event, interviewIdRef.current);
           activeResponseRef.current = false;
           if (responseRequestQueuedRef.current) {
             responseRequestQueuedRef.current = false;

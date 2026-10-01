@@ -12,6 +12,7 @@ import InterviewProgress from "./pages/InterviewProgress.jsx";
 import AppliedJobs from "./pages/AppliedJobs.jsx";
 import JobProfile from "./pages/JobProfile.jsx";
 import AccountProfile from "./pages/AccountProfile.jsx";
+import Usage from "./pages/Usage.jsx";
 import MicCheck from "./pages/MicCheck.jsx";
 import Interview from "./pages/Interview.jsx";
 import Results from "./pages/Results.jsx";
@@ -50,6 +51,7 @@ export default function App() {
             <Route path="/applied-jobs" element={<AppliedJobs />} />
             <Route path="/job-profile" element={<JobProfile />} />
             <Route path="/setting/profile" element={<AccountProfile />} />
+            <Route path="/setting/usage" element={<Usage />} />
             <Route element={<RequireAdmin />}>
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/users" element={<AdminUsers />} />

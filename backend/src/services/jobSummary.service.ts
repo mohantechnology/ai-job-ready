@@ -6,7 +6,8 @@ import { buildPageFormatVariants } from "../lib/jobbotHtmlToPageText";
 import { getUserDetails } from "../repositories/userProfile.repository";
 import { FILL_LLM_TIMEOUT_MS, MAX_PAGE_HTML_CHARS, parseLlmJson, slimUserDetailsForPrompt } from "../prompts/jobbotFillForm";
 import { getLatestResumeForUser } from "../store/interviewStore";
-import { runCursorTextPrompt } from "./jobbotCursor.service";
+import { runCursorTextPromptDetailed } from "./jobbotCursor.service";
+import { errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 import { normalizeLevel, normalizeTopics, normalizeWorkMode, sanitizeMeta } from "./jobExtract.service";
 
 const CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
@@ -133,6 +134,7 @@ async function logExchange(provider, pageUrl, output) {
 }
 
 async function requestOpenAI(userPrompt) {
+  const startedAt = Date.now();
   if (!env.openaiApiKey) {
     throw new Error("Job summary with OpenAI is not configured on the server.");
   }
@@ -161,9 +163,18 @@ async function requestOpenAI(userPrompt) {
   const data = await response.json();
   const content = data?.choices?.[0]?.message?.content;
   if (!content) {
-    throw new Error("Could not analyze this page right now. Try again in a moment.");
+    const error: any = new Error("Could not analyze this page right now. Try again in a moment.");
+    error.usage = data?.usage;
+    error.model = data?.model;
+    throw error;
   }
-  return content;
+  return {
+    content,
+    usage: data?.usage ?? null,
+    model: data?.model || env.openaiChatModel,
+    serviceTier: data?.service_tier || null,
+    durationMs: Date.now() - startedAt,
+  };
 }
 
 function emptyFit(note) {
@@ -225,10 +236,30 @@ export async function summarizeJobPage({ pageHtml, meta, userId }) {
 
   const cursorPrompt = `${SYSTEM_PROMPT}\n\n${userPrompt}\n\nReply with a single JSON object only. No markdown fences, no commentary.`;
 
+  const startedAt = Date.now();
+  const modelFallback = provider === "openai" ? env.openaiChatModel : env.cursorModel;
+  let captured: any = null;
   let content = "";
   try {
-    content = provider === "openai" ? await requestOpenAI(userPrompt) : await runCursorTextPrompt(cursorPrompt);
+    if (provider === "openai") {
+      captured = await requestOpenAI(userPrompt);
+      content = captured.content;
+    } else {
+      captured = await runCursorTextPromptDetailed(cursorPrompt);
+      content = captured.text;
+    }
   } catch (err) {
+    await recordLlmUsage({
+      userId,
+      provider,
+      apiKeyProvider: provider,
+      model: (err as any)?.model || modelFallback,
+      feature: "job_summary",
+      status: statusFromError(err),
+      usage: (err as any)?.usage,
+      durationMs: Date.now() - startedAt,
+      errorMessage: errorText(err),
+    });
     await logExchange(provider, pageMeta.url, err instanceof Error ? err.message : String(err)).catch(() => {});
     throw err;
   }
@@ -236,8 +267,32 @@ export async function summarizeJobPage({ pageHtml, meta, userId }) {
 
   const parsed = parseLlmJson(content);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    await recordLlmUsage({
+      userId,
+      provider,
+      apiKeyProvider: provider,
+      model: captured?.model || modelFallback,
+      feature: "job_summary",
+      status: "failed",
+      serviceTier: captured?.serviceTier,
+      usage: captured?.usage,
+      durationMs: captured?.durationMs ?? Date.now() - startedAt,
+      errorMessage: "Could not analyze this page right now. Try again in a moment.",
+    });
     throw new Error("Could not analyze this page right now. Try again in a moment.");
   }
+
+  await recordLlmUsage({
+    userId,
+    provider,
+    apiKeyProvider: provider,
+    model: captured?.model || modelFallback,
+    feature: "job_summary",
+    status: "success",
+    serviceTier: captured?.serviceTier,
+    usage: captured?.usage,
+    durationMs: captured?.durationMs ?? Date.now() - startedAt,
+  });
 
   const source = parsed.job && typeof parsed.job === "object" ? parsed.job : parsed;
   const isJobPosting = source.isJobPosting !== false && parsed.isJobPosting !== false;

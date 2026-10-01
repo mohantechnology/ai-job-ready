@@ -14,6 +14,7 @@ import { ProfileModule } from "./modules/profile/profile.module";
 import { JobFormModule } from "./modules/job-form/job-form.module";
 import { FormsPagesModule } from "./modules/forms-pages/forms-pages.module";
 import { AdminModule } from "./modules/admin/admin.module";
+import { UsageModule } from "./modules/usage/usage.module";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { AdminModule } from "./modules/admin/admin.module";
     JobFormModule,
     FormsPagesModule,
     AdminModule,
+    UsageModule,
   ],
   controllers: [HealthController],
   providers: [

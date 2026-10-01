@@ -1,4 +1,5 @@
 import { env } from "../config/env";
+import { errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 
 const CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -64,41 +65,72 @@ export async function generateInterviewSummary(interview, questions = []) {
     transcriptText || "(no transcript captured)",
   ].join("\n");
 
-  const response = await fetch(CHAT_COMPLETIONS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.openaiApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: env.openaiChatModel,
-      response_format: { type: "json_object" },
-      // temperature: 0.2,
-      messages: [
-        { role: "system", content: GRADING_SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Failed to grade interview (${response.status}): ${errorBody}`);
-  }
-
-  const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error("Grading response did not include content.");
-  }
-
-  const parsed = JSON.parse(content);
-  return {
-    overallScore: parsed.overallScore,
-    overallFeedback: parsed.overallFeedback,
-    strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
-    improvements: Array.isArray(parsed.improvements) ? parsed.improvements : [],
-    topics: Array.isArray(parsed.topics) ? parsed.topics : [],
-    questionResults: Array.isArray(parsed.questionResults) ? parsed.questionResults : [],
+  const startedAt = Date.now();
+  const track = {
+    userId: interview.userId,
+    provider: "openai" as const,
+    apiKeyProvider: "openai" as const,
+    model: env.openaiChatModel,
+    feature: "interview_grading",
+    meta: interview.id ? { interviewId: interview.id } : null,
   };
+
+  let data: any = null;
+  try {
+    const response = await fetch(CHAT_COMPLETIONS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.openaiApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: env.openaiChatModel,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: GRADING_SYSTEM_PROMPT },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Failed to grade interview (${response.status}): ${errorBody}`);
+    }
+
+    data = await response.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error("Grading response did not include content.");
+    }
+
+    const parsed = JSON.parse(content);
+    await recordLlmUsage({
+      ...track,
+      model: data?.model || env.openaiChatModel,
+      status: "success",
+      serviceTier: data?.service_tier || null,
+      usage: data?.usage,
+      durationMs: Date.now() - startedAt,
+    });
+    return {
+      overallScore: parsed.overallScore,
+      overallFeedback: parsed.overallFeedback,
+      strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
+      improvements: Array.isArray(parsed.improvements) ? parsed.improvements : [],
+      topics: Array.isArray(parsed.topics) ? parsed.topics : [],
+      questionResults: Array.isArray(parsed.questionResults) ? parsed.questionResults : [],
+    };
+  } catch (err) {
+    await recordLlmUsage({
+      ...track,
+      model: data?.model || env.openaiChatModel,
+      status: statusFromError(err),
+      serviceTier: data?.service_tier || null,
+      usage: data?.usage,
+      durationMs: Date.now() - startedAt,
+      errorMessage: errorText(err),
+    });
+    throw err;
+  }
 }

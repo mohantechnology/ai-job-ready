@@ -1,5 +1,6 @@
 import { env } from "../config/env";
 import { getConceptStatsForUser } from "../repositories/taxonomy.repository";
+import { errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 
 const CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -53,35 +54,77 @@ export async function generateInterviewQuestions({
     historyLines.length ? historyLines.join("\n") : "(no prior history for this candidate on these topics)",
   ].join("\n");
 
-  const response = await fetch(CHAT_COMPLETIONS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.openaiApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: env.openaiChatModel,
-      response_format: { type: "json_object" },
-      // temperature: 0.5,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
-    }),
-  });
+  const startedAt = Date.now();
+  const track = {
+    userId,
+    provider: "openai" as const,
+    apiKeyProvider: "openai" as const,
+    model: env.openaiChatModel,
+    feature: "question_generation",
+  };
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Failed to generate interview questions (${response.status}): ${errorBody}`);
+  try {
+    const response = await fetch(CHAT_COMPLETIONS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.openaiApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: env.openaiChatModel,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Failed to generate interview questions (${response.status}): ${errorBody}`);
+    }
+
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) {
+      const error: any = new Error("Question generation response did not include content.");
+      error.usage = data?.usage;
+      error.model = data?.model;
+      throw error;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(content);
+    } catch (err) {
+      const error: any = new Error("Question generation response was not valid JSON.");
+      error.usage = data?.usage;
+      error.model = data?.model;
+      error.cause = err;
+      throw error;
+    }
+
+    await recordLlmUsage({
+      ...track,
+      model: data?.model || env.openaiChatModel,
+      status: "success",
+      serviceTier: data?.service_tier || null,
+      usage: data?.usage,
+      durationMs: Date.now() - startedAt,
+    });
+
+    const questions = Array.isArray(parsed.questions) ? parsed.questions : [];
+    return questions.slice(0, numberOfQuestions);
+  } catch (err) {
+    await recordLlmUsage({
+      ...track,
+      model: (err as any)?.model || env.openaiChatModel,
+      status: statusFromError(err),
+      usage: (err as any)?.usage,
+      durationMs: Date.now() - startedAt,
+      errorMessage: errorText(err),
+    });
+    throw err;
   }
-
-  const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error("Question generation response did not include content.");
-  }
-
-  const parsed = JSON.parse(content);
-  const questions = Array.isArray(parsed.questions) ? parsed.questions : [];
-  return questions.slice(0, numberOfQuestions);
 }

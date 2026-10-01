@@ -95,7 +95,7 @@ export class AppliedJobsController {
 
     let extracted;
     try {
-      extracted = await extractJobFromPage(pageHtml, { ...(meta || {}), url: sourceUrl });
+      extracted = await extractJobFromPage(pageHtml, { ...(meta || {}), url: sourceUrl }, user.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not read this job page.";
       throw new ApiError(502, message);
@@ -164,7 +164,7 @@ export class AppliedJobsController {
 
     let research = "";
     try {
-      research = await researchJobAndCompany(job);
+      research = await researchJobAndCompany(job, user.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not research this job.";
       throw new ApiError(502, message);
@@ -189,7 +189,7 @@ export class AppliedJobsController {
     let research = "";
     if (wantResearch) {
       try {
-        research = await researchJobAndCompany(job);
+        research = await researchJobAndCompany(job, user.id);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Could not research this job.";
         throw new ApiError(502, message);

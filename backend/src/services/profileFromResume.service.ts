@@ -3,7 +3,8 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { env } from "../config/env";
 import { OUTPUT_DIR } from "../lib/jobbotHtmlParser";
-import { runCursorTextPrompt } from "./jobbotCursor.service";
+import { runCursorTextPromptDetailed } from "./jobbotCursor.service";
+import { errorText, recordLlmUsage, statusFromError } from "./llmUsage.service";
 
 const CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
 const SCHEMA_PATH = join(__dirname, "../jsonData/userDetails.json");
@@ -342,6 +343,7 @@ async function logPrefillExchange(provider, input, output) {
 }
 
 async function requestOpenAI(userPrompt) {
+  const startedAt = Date.now();
   if (!env.openaiApiKey) {
     throw new Error("Resume reading with OpenAI is not configured on the server.");
   }
@@ -372,9 +374,18 @@ async function requestOpenAI(userPrompt) {
   const data = await response.json();
   const content = data?.choices?.[0]?.message?.content;
   if (!content) {
-    throw new Error("Could not read the resume right now. Try again in a moment.");
+    const error: any = new Error("Could not read the resume right now. Try again in a moment.");
+    error.usage = data?.usage;
+    error.model = data?.model;
+    throw error;
   }
-  return content;
+  return {
+    content,
+    usage: data?.usage ?? null,
+    model: data?.model || env.openaiChatModel,
+    serviceTier: data?.service_tier || null,
+    durationMs: Date.now() - startedAt,
+  };
 }
 
 function parseModelJson(content) {
@@ -389,7 +400,7 @@ function parseModelJson(content) {
   return parsed;
 }
 
-export async function extractProfileFromResume(resumeText) {
+export async function extractProfileFromResume(resumeText, userId) {
   const resume = String(resumeText || "").trim().slice(0, MAX_RESUME_CHARS);
   if (resume.length < 40) {
     throw new Error("Upload a resume with readable text.");
@@ -410,15 +421,31 @@ export async function extractProfileFromResume(resumeText) {
   ].join("\n");
   const inputLog = [`provider: ${provider}`, "", "SYSTEM", SYSTEM_PROMPT, "", "USER", userPrompt].join("\n");
 
+  const startedAt = Date.now();
+  const modelFallback = provider === "openai" ? env.openaiChatModel : env.cursorModel;
+  const cursorPrompt = `${SYSTEM_PROMPT}\n\n${userPrompt}\n\nReply with a single JSON object only. No markdown fences, no commentary.`;
+  let captured: any = null;
   let content = "";
   try {
-    content =
-      provider === "openai"
-        ? await requestOpenAI(userPrompt)
-        : await runCursorTextPrompt(
-            `${SYSTEM_PROMPT}\n\n${userPrompt}\n\nReply with a single JSON object only. No markdown fences, no commentary.`
-          );
+    if (provider === "openai") {
+      captured = await requestOpenAI(userPrompt);
+      content = captured.content;
+    } else {
+      captured = await runCursorTextPromptDetailed(cursorPrompt);
+      content = captured.text;
+    }
   } catch (err) {
+    await recordLlmUsage({
+      userId,
+      provider,
+      apiKeyProvider: provider,
+      model: (err as any)?.model || modelFallback,
+      feature: "resume_prefill",
+      status: statusFromError(err),
+      usage: (err as any)?.usage,
+      durationMs: Date.now() - startedAt,
+      errorMessage: errorText(err),
+    });
     await logPrefillExchange(provider, inputLog, err instanceof Error ? err.message : String(err)).catch((logErr) => {
       console.warn("profile-from-resume log failed:", logErr);
     });
@@ -434,8 +461,32 @@ export async function extractProfileFromResume(resumeText) {
     rawValues = parseModelJson(content);
   } catch (err) {
     console.error("profile-from-resume JSON parse failed:", err);
+    await recordLlmUsage({
+      userId,
+      provider,
+      apiKeyProvider: provider,
+      model: captured?.model || modelFallback,
+      feature: "resume_prefill",
+      status: "failed",
+      serviceTier: captured?.serviceTier,
+      usage: captured?.usage,
+      durationMs: captured?.durationMs ?? Date.now() - startedAt,
+      errorMessage: "Could not read the resume right now. Try again in a moment.",
+    });
     throw new Error("Could not read the resume right now. Try again in a moment.");
   }
+
+  await recordLlmUsage({
+    userId,
+    provider,
+    apiKeyProvider: provider,
+    model: captured?.model || modelFallback,
+    feature: "resume_prefill",
+    status: "success",
+    serviceTier: captured?.serviceTier,
+    usage: captured?.usage,
+    durationMs: captured?.durationMs ?? Date.now() - startedAt,
+  });
 
   const values = sanitizeProfileValues(rawValues, schema);
   return { values, filledCount: countFilled(schema, values) };

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Check, ChevronRight, LogOut, MoreVertical, SunMoon, UserRound } from "lucide-react";
+import { BarChart3, Check, ChevronRight, LogOut, MoreVertical, SunMoon, UserRound } from "lucide-react";
 
 const APPEARANCE_KEY = "jobready_appearance";
 const APPEARANCE_OPTIONS = [
@@ -74,6 +74,12 @@ export default function AccountMenu({ collapsed = false, user, onLogout, onNavig
     navigate("/setting/profile");
   }
 
+  function openUsage() {
+    close();
+    onNavigate?.();
+    navigate("/setting/usage");
+  }
+
   const menu = open && (
     <div
       role="menu"
@@ -89,6 +95,16 @@ export default function AccountMenu({ collapsed = false, user, onLogout, onNavig
       >
         <UserRound className="h-4 w-4 text-slate-400" />
         Profile
+      </button>
+
+      <button
+        type="button"
+        role="menuitem"
+        onClick={openUsage}
+        className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/[0.06]"
+      >
+        <BarChart3 className="h-4 w-4 text-slate-400" />
+        Usage
       </button>
 
       <div
