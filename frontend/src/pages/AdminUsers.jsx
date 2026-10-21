@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { Eye, Pencil, Trash2 } from "lucide-react";
 import { deleteAdminUser, listAdminUsers, updateAdminUser } from "../lib/api.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import PageFrame from "../components/layout/PageFrame.jsx";
@@ -11,6 +13,12 @@ function formatDate(value) {
   if (!value) return "—";
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
+
+function userDetailsPath(id) {
+  return `/admin/users/${id}/details`;
+}
+
+const iconButtonClass = "rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-slate-100";
 
 export default function AdminUsers() {
   const { user, refreshUser } = useAuth();
@@ -160,7 +168,14 @@ export default function AdminUsers() {
                       const isSelf = row.id === user?.id;
                       return (
                         <tr key={row.id} className="border-t border-white/5">
-                          <td className="px-4 py-3 font-medium text-slate-100 sm:px-5">{row.name}</td>
+                          <td className="px-4 py-3 sm:px-5">
+                            <Link
+                              to={userDetailsPath(row.id)}
+                              className="font-medium text-slate-100 transition hover:text-indigo-200"
+                            >
+                              {row.name}
+                            </Link>
+                          </td>
                           <td className="max-w-[16rem] truncate px-3 py-3 text-slate-400">{row.email}</td>
                           <td className="px-3 py-3">
                             <span
@@ -175,13 +190,21 @@ export default function AdminUsers() {
                           <td className="px-3 py-3 tabular-nums text-slate-300">{row.interviewCount}</td>
                           <td className="whitespace-nowrap px-3 py-3 text-slate-500">{formatDate(row.lastActivityAt)}</td>
                           <td className="px-4 py-3 sm:px-5">
-                            <div className="flex gap-2">
+                            <div className="flex gap-1">
+                              <Link
+                                to={userDetailsPath(row.id)}
+                                className={iconButtonClass}
+                                aria-label={`View ${row.name}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Link>
                               <button
                                 type="button"
                                 onClick={() => openEdit(row)}
-                                className="rounded-lg px-2.5 py-1 text-xs font-medium text-indigo-300 transition hover:bg-indigo-500/10"
+                                className="rounded-lg p-2 text-slate-400 transition hover:bg-indigo-500/10 hover:text-indigo-200"
+                                aria-label={`Edit ${row.name}`}
                               >
-                                Edit
+                                <Pencil className="h-4 w-4" />
                               </button>
                               {!isSelf && (
                                 <button
@@ -190,9 +213,10 @@ export default function AdminUsers() {
                                     setFormError("");
                                     setDeleting(row);
                                   }}
-                                  className="rounded-lg px-2.5 py-1 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10"
+                                  className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-200"
+                                  aria-label={`Delete ${row.name}`}
                                 >
-                                  Delete
+                                  <Trash2 className="h-4 w-4" />
                                 </button>
                               )}
                             </div>

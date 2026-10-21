@@ -172,9 +172,9 @@ export function reportRealtimeUsage(payload) {
   });
 }
 
-export async function downloadUsageCsv(rangeOrOptions = "this_month") {
+async function downloadCsv(path, filename) {
   const token = getToken();
-  const response = await fetch(`${BASE_URL}/usage/export?${rangeQuery(rangeOrOptions)}`, {
+  const response = await fetch(`${BASE_URL}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!response.ok) {
@@ -191,11 +191,15 @@ export async function downloadUsageCsv(rangeOrOptions = "this_month") {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "usage.csv";
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+export async function downloadUsageCsv(rangeOrOptions = "this_month") {
+  return downloadCsv(`/usage/export?${rangeQuery(rangeOrOptions)}`, "usage.csv");
 }
 
 export function getAdminStats() {
@@ -204,6 +208,21 @@ export function getAdminStats() {
 
 export function listAdminUsers() {
   return request("/admin/users");
+}
+
+export function getAdminUser(id) {
+  return request(`/admin/users/${id}`);
+}
+
+export function getAdminUserUsage(id, rangeOrOptions = "this_month", page = {}) {
+  const params = rangeQuery(rangeOrOptions);
+  if (page.limit) params.set("limit", String(page.limit));
+  if (page.offset) params.set("offset", String(page.offset));
+  return request(`/admin/users/${id}/usage?${params}`);
+}
+
+export function downloadAdminUserUsageCsv(id, rangeOrOptions = "this_month") {
+  return downloadCsv(`/admin/users/${id}/usage/export?${rangeQuery(rangeOrOptions)}`, "usage.csv");
 }
 
 export function updateAdminUser(id, payload) {

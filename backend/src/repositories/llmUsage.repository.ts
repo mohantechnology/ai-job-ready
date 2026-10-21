@@ -15,7 +15,7 @@ function asNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function mapEvent(row) {
+function mapEvent(row, includeApiKeyProvider = false) {
   return {
     id: row.id,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : new Date(row.created_at).toISOString(),
@@ -33,6 +33,7 @@ function mapEvent(row) {
     durationMs: row.duration_ms,
     ttfbMs: row.ttfb_ms,
     errorMessage: row.error_message,
+    ...(includeApiKeyProvider ? { apiKeyProvider: row.api_key_provider || null } : {}),
   };
 }
 
@@ -133,11 +134,12 @@ export async function getUsageDaily(userId, start, end) {
   }));
 }
 
-export async function listUsageEvents(userId, start, end, limit, offset) {
+export async function listUsageEvents(userId, start, end, limit, offset, options: { includeApiKeyProvider?: boolean } = {}) {
+  const includeApiKeyProvider = Boolean(options.includeApiKeyProvider);
   const params = [...rangeArgs(userId, start, end), limit, offset];
   const result = await query(
     `SELECT
-       id, created_at, model, feature, status, service_tier,
+       id, created_at, model, feature, status, service_tier, api_key_provider,
        input_tokens, cached_input_tokens, output_tokens, reasoning_tokens,
        audio_input_tokens, audio_output_tokens, total_tokens,
        duration_ms, ttfb_ms, error_message
@@ -147,7 +149,7 @@ export async function listUsageEvents(userId, start, end, limit, offset) {
      LIMIT $4 OFFSET $5`,
     params
   );
-  return result.rows.map(mapEvent);
+  return result.rows.map((row) => mapEvent(row, includeApiKeyProvider));
 }
 
 const CSV_HEADERS = [
@@ -178,31 +180,40 @@ function modeLabel(serviceTier) {
   return String(serviceTier || "").toLowerCase() === "fast" ? "Fast" : "Standard";
 }
 
-export async function usageEventsCsv(userId, start, end) {
-  const events = await listUsageEvents(userId, start, end, 10000, 0);
-  const lines = [CSV_HEADERS.join(",")];
+function apiKeyProviderLabel(value) {
+  const key = String(value || "").toLowerCase();
+  if (key === "openai") return "OpenAI";
+  if (key === "cursor") return "Cursor";
+  if (key === "other") return "Other";
+  return value || "";
+}
+
+export async function usageEventsCsv(userId, start, end, options: { includeApiKeyProvider?: boolean } = {}) {
+  const includeApiKeyProvider = Boolean(options.includeApiKeyProvider);
+  const events = await listUsageEvents(userId, start, end, 10000, 0, { includeApiKeyProvider });
+  const headers = [...CSV_HEADERS];
+  if (includeApiKeyProvider) headers.splice(3, 0, "API key provider");
+  const lines = [headers.join(",")];
   for (const event of events) {
-    lines.push(
-      [
-        event.createdAt,
-        event.feature,
-        event.model,
-        modeLabel(event.serviceTier),
-        event.inputTokens,
-        event.cachedInputTokens,
-        event.outputTokens,
-        event.reasoningTokens,
-        event.audioInputTokens,
-        event.audioOutputTokens,
-        event.totalTokens,
-        event.status,
-        event.durationMs ?? "",
-        event.ttfbMs ?? "",
-        event.errorMessage ?? "",
-      ]
-        .map(csvCell)
-        .join(",")
-    );
+    const cells = [
+      event.createdAt,
+      event.feature,
+      event.model,
+      modeLabel(event.serviceTier),
+      event.inputTokens,
+      event.cachedInputTokens,
+      event.outputTokens,
+      event.reasoningTokens,
+      event.audioInputTokens,
+      event.audioOutputTokens,
+      event.totalTokens,
+      event.status,
+      event.durationMs ?? "",
+      event.ttfbMs ?? "",
+      event.errorMessage ?? "",
+    ];
+    if (includeApiKeyProvider) cells.splice(3, 0, apiKeyProviderLabel(event.apiKeyProvider));
+    lines.push(cells.map(csvCell).join(","));
   }
   return `${lines.join("\n")}\n`;
 }

@@ -25,6 +25,10 @@ export async function findUserWithPasswordById(id) {
   return result.rows[0] || null;
 }
 
+export async function recordLastLogin(id) {
+  await query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [id]);
+}
+
 export async function updateUserAccount(id, updates: { name?: string; passwordHash?: string }) {
   const { name, passwordHash } = updates;
   const sets = [];

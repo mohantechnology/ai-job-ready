@@ -18,6 +18,7 @@ import Interview from "./pages/Interview.jsx";
 import Results from "./pages/Results.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AdminUsers from "./pages/AdminUsers.jsx";
+import AdminUserDetails from "./pages/AdminUserDetails.jsx";
 import AdminModels from "./pages/AdminModels.jsx";
 
 function SearchRedirect({ to }) {
@@ -56,6 +57,7 @@ export default function App() {
             <Route element={<RequireAdmin />}>
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/users" element={<AdminUsers />} />
+              <Route path="/admin/users/:userId/details" element={<AdminUserDetails />} />
               <Route path="/admin/models" element={<AdminModels />} />
             </Route>
             <Route path="/progress" element={<Navigate to="/dashboard" replace />} />

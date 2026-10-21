@@ -12,6 +12,7 @@ import {
   findUserByEmail,
   findUserById,
   findUserWithPasswordById,
+  recordLastLogin,
   updateUserAccount,
 } from "../../repositories/user.repository";
 
@@ -82,6 +83,8 @@ export class AuthController {
     if (!matches) {
       throw new ApiError(401, "Invalid email or password");
     }
+
+    await recordLastLogin(user.id);
 
     const token = signToken(user);
     req.session.userId = user.id;
