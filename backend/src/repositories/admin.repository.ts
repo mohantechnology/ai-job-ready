@@ -66,6 +66,7 @@ export async function listAdminUsers() {
        u.email,
        u.created_at,
        COALESCE(i.interview_count, 0)::int AS interview_count,
+       COALESCE(a.applied_job_count, 0)::int AS applied_job_count,
        GREATEST(i.last_activity, a.last_activity) AS last_activity
      FROM users u
      LEFT JOIN (
@@ -83,7 +84,7 @@ export async function listAdminUsers() {
        GROUP BY user_id
      ) i ON i.user_id = u.id
      LEFT JOIN (
-       SELECT user_id, MAX(created_at) AS last_activity
+       SELECT user_id, COUNT(*)::int AS applied_job_count, MAX(created_at) AS last_activity
        FROM applied_jobs
        GROUP BY user_id
      ) a ON a.user_id = u.id
@@ -97,6 +98,7 @@ export async function listAdminUsers() {
     createdAt: iso(row.created_at),
     isAdmin: resolveAccountRole(row.email) === AccountRole.Admin,
     interviewCount: count(row.interview_count),
+    appliedJobCount: count(row.applied_job_count),
     lastActivityAt: iso(row.last_activity),
   }));
 }
